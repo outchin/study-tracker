@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Play, Pause, Square, Plus, X, Edit2, Trash2, Award, Coffee, CheckCircle, Loader2, Clock, Settings } from 'lucide-react';
+import { Play, Pause, Square, Plus, X, Edit2, Trash2, Award, Coffee, CheckCircle, Loader2, Clock, Settings, Grid3X3, List } from 'lucide-react';
 import TimetableView from '../components/timetable/TimetableView';
 import AddPastSessionModal from '../components/AddPastSessionModal';
 import ConfigurationModal from '../components/ConfigurationModal';
@@ -77,6 +77,7 @@ export default function StudyTracker() {
   const [pausedSeconds, setPausedSeconds] = useState<number>(0);
   const [totalPausedTime, setTotalPausedTime] = useState<number>(0);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [saveError, setSaveError] = useState<string | null>(null);
   const [showPastSessionModal, setShowPastSessionModal] = useState<boolean>(false);
   const [showConfigModal, setShowConfigModal] = useState<boolean>(false);
@@ -84,21 +85,6 @@ export default function StudyTracker() {
 
   const POMODORO_WORK = 25 * 60;
   const POMODORO_BREAK = 5 * 60;
-
-  // Calculate today's studied time for a category from sessions
-  const calculateTodayStudied = (categoryId: number): number => {
-    const today = new Date().toISOString().split('T')[0];
-    const todaySessions = sessions.filter(session => session.date === today && session.categoryId === categoryId);
-    const totalTime = todaySessions.reduce((sum, session) => sum + session.duration, 0);
-    
-    // Debug logging
-    if (todaySessions.length > 0) {
-      console.log(`Category ${categoryId} today sessions:`, todaySessions);
-      console.log(`Total time: ${totalTime} hours`);
-    }
-    
-    return totalTime;
-  };
 
   const loadLocalData = () => {
     // Fallback to localStorage or default
@@ -144,7 +130,7 @@ export default function StudyTracker() {
             dailyTarget: cat.dailyTarget,
             totalStudied: cat.totalStudied,
             monthStudied: cat.monthStudied,
-            todayStudied: cat.todayStudied || 0, // Will be updated by useEffect
+            todayStudied: cat.todayStudied,
             isActive: false,
             currentSession: 0,
             earnedUSD: cat.earnedUSD || 0,
@@ -326,16 +312,6 @@ export default function StudyTracker() {
   useEffect(() => {
     if (sessions.length > 0) {
       localStorage.setItem('studySessions', JSON.stringify(sessions));
-    }
-  }, [sessions]);
-
-  // Update todayStudied for all categories when sessions change
-  useEffect(() => {
-    if (categories.length > 0 && sessions.length > 0) {
-      setCategories(prev => prev.map(cat => ({
-        ...cat,
-        todayStudied: calculateTodayStudied(cat.id)
-      })));
     }
   }, [sessions]);
 
@@ -744,58 +720,11 @@ export default function StudyTracker() {
     setShowEditModal(true);
   };
 
-  const saveEdit = async () => {
+  const saveEdit = () => {
     if (!editingCategory) return;
-
-    try {
-      setIsSaving(true);
-      
-      // Update local state first
-      setCategories(prev => prev.map(c => c.id === editingCategory.id ? editingCategory : c));
-
-      // If category has Notion page ID and API is configured, sync to Notion
-      if (editingCategory.notionPageId && apiClient.isConfigured()) {
-        console.log('Syncing updated category to Notion:', editingCategory.name);
-        
-        try {
-          const response = await apiClient.patch(`/api/categories/${editingCategory.notionPageId}`, editingCategory);
-          
-          if (!response.ok) {
-            console.warn('Failed to sync to Notion, but local update succeeded');
-            setSaveError('Category updated locally but failed to sync to Notion');
-            setTimeout(() => setSaveError(null), 5000);
-          } else {
-            console.log('Category successfully synced to Notion');
-            setShowAchievement({ 
-              title: 'Goal Updated!', 
-              desc: `${editingCategory.name} synced to Notion` 
-            });
-            setTimeout(() => setShowAchievement(null), 3000);
-          }
-        } catch (syncError) {
-          console.warn('Notion sync failed:', syncError);
-          setSaveError('Category updated locally but failed to sync to Notion');
-          setTimeout(() => setSaveError(null), 5000);
-        }
-      } else {
-        // No Notion sync needed, just show success
-        setShowAchievement({ 
-          title: 'Goal Updated!', 
-          desc: `${editingCategory.name} has been updated` 
-        });
-        setTimeout(() => setShowAchievement(null), 3000);
-      }
-
-      setShowEditModal(false);
-      setEditingCategory(null);
-      
-    } catch (error) {
-      console.error('Failed to update category:', error);
-      setSaveError('Failed to update category. Please try again.');
-      setTimeout(() => setSaveError(null), 5000);
-    } finally {
-      setIsSaving(false);
-    }
+    setCategories(categories.map(c => c.id === editingCategory.id ? editingCategory : c));
+    setShowEditModal(false);
+    setEditingCategory(null);
   };
 
   const withdrawFunds = (categoryId: number) => {
@@ -1212,14 +1141,12 @@ export default function StudyTracker() {
                 )}
 
                 {!focusMode && <div className={`h-px ${themeClasses.border}`}></div>}
-
                 {!focusMode && (
                   <DailyFocusBreakdown 
                     categories={categories} 
                     showCurrency={showCurrency}
                   />
                 )}
-
                 {!focusMode && <div className={`h-px ${themeClasses.border}`}></div>}
 
                 <div className="space-y-6">
@@ -1229,7 +1156,41 @@ export default function StudyTracker() {
                       <p className="text-lg">Stay focused on your active study session</p>
                     </div>
                   )}
-                  {categoriesToShow
+                  
+                  {/* Categories View Toggle */}
+                  {!focusMode && (
+                    <div className="flex items-center justify-between">
+                      <h3 className={`text-lg font-medium ${themeClasses.text}`}>Study Categories</h3>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setViewMode('list')}
+                          className={`p-2 rounded-lg transition-colors ${
+                            viewMode === 'list' 
+                              ? 'bg-blue-500 text-white' 
+                              : `${themeClasses.button}`
+                          }`}
+                          title="List View"
+                        >
+                          <List className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => setViewMode('grid')}
+                          className={`p-2 rounded-lg transition-colors ${
+                            viewMode === 'grid' 
+                              ? 'bg-blue-500 text-white' 
+                              : `${themeClasses.button}`
+                          }`}
+                          title="Grid View"
+                        >
+                          <Grid3X3 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Categories Container */}
+                  <div className={viewMode === 'grid' && !focusMode ? 'grid grid-cols-2 gap-6' : 'space-y-6'}>
+                    {categoriesToShow
                     .sort((a, b) => b.priority === 'high' ? 1 : -1)
                     .map(category => {
                     const dailyProgress = (category.todayStudied / category.dailyTarget) * 100;
@@ -1403,7 +1364,7 @@ export default function StudyTracker() {
                         </div>
                     );
                   })}
-                </div>
+                  </div>
 
                 {!focusMode && (
                   <div className="space-y-4">
@@ -1725,20 +1686,7 @@ export default function StudyTracker() {
                         className="border border-gray-300 rounded px-3 py-2"
                     />
                   </div>
-                  <button 
-                    onClick={saveEdit} 
-                    className="w-full bg-black text-white py-2 rounded disabled:opacity-50 flex items-center justify-center gap-2"
-                    disabled={isSaving}
-                  >
-                    {isSaving ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Updating...
-                      </>
-                    ) : (
-                      'Save'
-                    )}
-                  </button>
+                  <button onClick={saveEdit} className="w-full bg-black text-white py-2 rounded">Save</button>
                 </div>
               </div>
             </div>
