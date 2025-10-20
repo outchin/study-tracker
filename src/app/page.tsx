@@ -86,6 +86,21 @@ export default function StudyTracker() {
   const POMODORO_WORK = 25 * 60;
   const POMODORO_BREAK = 5 * 60;
 
+  // Calculate today's studied time for a category from sessions
+  const calculateTodayStudied = (categoryId: number): number => {
+    const today = new Date().toISOString().split('T')[0];
+    const todaySessions = sessions.filter(session => session.date === today && session.categoryId === categoryId);
+    const totalTime = todaySessions.reduce((sum, session) => sum + session.duration, 0);
+    
+    // Debug logging
+    if (todaySessions.length > 0) {
+      console.log(`Category ${categoryId} today sessions:`, todaySessions);
+      console.log(`Total time: ${totalTime} hours`);
+    }
+    
+    return totalTime;
+  };
+
   const loadLocalData = () => {
     // Fallback to localStorage or default
     const savedCategories = localStorage.getItem('studyCategories');
@@ -130,7 +145,7 @@ export default function StudyTracker() {
             dailyTarget: cat.dailyTarget,
             totalStudied: cat.totalStudied,
             monthStudied: cat.monthStudied,
-            todayStudied: cat.todayStudied,
+            todayStudied: cat.todayStudied || 0, // Will be updated by useEffect
             isActive: false,
             currentSession: 0,
             earnedUSD: cat.earnedUSD || 0,
@@ -312,6 +327,16 @@ export default function StudyTracker() {
   useEffect(() => {
     if (sessions.length > 0) {
       localStorage.setItem('studySessions', JSON.stringify(sessions));
+    }
+  }, [sessions]);
+
+  // Update todayStudied for all categories when sessions change
+  useEffect(() => {
+    if (categories.length > 0 && sessions.length > 0) {
+      setCategories(prev => prev.map(cat => ({
+        ...cat,
+        todayStudied: calculateTodayStudied(cat.id)
+      })));
     }
   }, [sessions]);
 
@@ -720,11 +745,58 @@ export default function StudyTracker() {
     setShowEditModal(true);
   };
 
-  const saveEdit = () => {
+  const saveEdit = async () => {
     if (!editingCategory) return;
-    setCategories(categories.map(c => c.id === editingCategory.id ? editingCategory : c));
-    setShowEditModal(false);
-    setEditingCategory(null);
+
+    try {
+      setIsSaving(true);
+      
+      // Update local state first
+      setCategories(prev => prev.map(c => c.id === editingCategory.id ? editingCategory : c));
+
+      // If category has Notion page ID and API is configured, sync to Notion
+      if (editingCategory.notionPageId && apiClient.isConfigured()) {
+        console.log('Syncing updated category to Notion:', editingCategory.name);
+        
+        try {
+          const response = await apiClient.patch(`/api/categories/${editingCategory.notionPageId}`, editingCategory);
+          
+          if (!response.ok) {
+            console.warn('Failed to sync to Notion, but local update succeeded');
+            setSaveError('Category updated locally but failed to sync to Notion');
+            setTimeout(() => setSaveError(null), 5000);
+          } else {
+            console.log('Category successfully synced to Notion');
+            setShowAchievement({ 
+              title: 'Goal Updated!', 
+              desc: `${editingCategory.name} synced to Notion` 
+            });
+            setTimeout(() => setShowAchievement(null), 3000);
+          }
+        } catch (syncError) {
+          console.warn('Notion sync failed:', syncError);
+          setSaveError('Category updated locally but failed to sync to Notion');
+          setTimeout(() => setSaveError(null), 5000);
+        }
+      } else {
+        // No Notion sync needed, just show success
+        setShowAchievement({ 
+          title: 'Goal Updated!', 
+          desc: `${editingCategory.name} has been updated` 
+        });
+        setTimeout(() => setShowAchievement(null), 3000);
+      }
+
+      setShowEditModal(false);
+      setEditingCategory(null);
+      
+    } catch (error) {
+      console.error('Failed to update category:', error);
+      setSaveError('Failed to update category. Please try again.');
+      setTimeout(() => setSaveError(null), 5000);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const withdrawFunds = (categoryId: number) => {
@@ -1141,12 +1213,14 @@ export default function StudyTracker() {
                 )}
 
                 {!focusMode && <div className={`h-px ${themeClasses.border}`}></div>}
+
                 {!focusMode && (
                   <DailyFocusBreakdown 
                     categories={categories} 
                     showCurrency={showCurrency}
                   />
                 )}
+
                 {!focusMode && <div className={`h-px ${themeClasses.border}`}></div>}
 
                 <div className="space-y-6">
@@ -1686,7 +1760,20 @@ export default function StudyTracker() {
                         className="border border-gray-300 rounded px-3 py-2"
                     />
                   </div>
-                  <button onClick={saveEdit} className="w-full bg-black text-white py-2 rounded">Save</button>
+                  <button 
+                    onClick={saveEdit} 
+                    className="w-full bg-black text-white py-2 rounded disabled:opacity-50 flex items-center justify-center gap-2"
+                    disabled={isSaving}
+                  >
+                    {isSaving ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Updating...
+                      </>
+                    ) : (
+                      'Save'
+                    )}
+                  </button>
                 </div>
               </div>
             </div>
