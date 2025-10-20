@@ -609,12 +609,28 @@ export default function StudyTracker() {
     try {
       setIsSaving(true);
       
-      // Add to local state first
-      setCategories(prev => [...prev, category]);
+      // Check if API client is configured
+      if (!apiClient.isConfigured()) {
+        throw new Error('Please configure your Notion API credentials first');
+      }
       
-      // Then sync to Notion
+      // First sync to Notion directly
       console.log('Syncing new category to Notion:', category.name);
-      await syncCategoryToNotion(category.id);
+      const response = await apiClient.post('/api/categories', category);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to sync category: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      // Add to local state with the Notion page ID
+      const categoryWithNotionId = {
+        ...category,
+        notionPageId: data.notionPageId
+      };
+      
+      setCategories(prev => [...prev, categoryWithNotionId]);
       
       console.log('New category successfully synced to Notion');
       setShowAchievement({ 
@@ -626,6 +642,10 @@ export default function StudyTracker() {
     } catch (error) {
       console.error('Failed to sync new category to Notion:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      
+      // Add to local state even if Notion sync fails
+      setCategories(prev => [...prev, category]);
+      
       setSaveError(`Category added locally but failed to sync to Notion: ${errorMessage}`);
       setTimeout(() => setSaveError(null), 10000); // Clear error after 10 seconds
     } finally {
