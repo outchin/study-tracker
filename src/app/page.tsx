@@ -665,9 +665,51 @@ export default function StudyTracker() {
     });
   };
 
-  const deleteCategory = (id: number) => {
-    if (typeof window !== 'undefined' && window.confirm('Delete this category?')) {
-      setCategories(categories.filter(c => c.id !== id));
+  const deleteCategory = async (id: number) => {
+    const category = categories.find(c => c.id === id);
+    if (!category) {
+      console.error('Category not found');
+      return;
+    }
+
+    if (typeof window !== 'undefined' && window.confirm(`Delete "${category.name}"? This action cannot be undone.`)) {
+      try {
+        setIsSaving(true);
+        
+        // If category has a Notion page ID, archive it in Notion first
+        if (category.notionPageId && apiClient.isConfigured()) {
+          console.log('Archiving category in Notion:', category.name);
+          
+          try {
+            const archiveResponse = await apiClient.patch(`/api/categories/${category.notionPageId}/archive`, {});
+            
+            if (!archiveResponse.ok) {
+              console.warn('Failed to archive in Notion, but will delete locally');
+            } else {
+              console.log('Category archived in Notion successfully');
+            }
+          } catch (archiveError) {
+            console.warn('Archive failed:', archiveError);
+          }
+        }
+        
+        // Remove from local state
+        setCategories(prev => prev.filter(c => c.id !== id));
+        
+        console.log('Category deleted successfully:', category.name);
+        setShowAchievement({ 
+          title: 'Category Deleted!', 
+          desc: `${category.name} has been removed` 
+        });
+        setTimeout(() => setShowAchievement(null), 3000);
+        
+      } catch (error) {
+        console.error('Failed to delete category:', error);
+        setSaveError('Failed to delete category. Please try again.');
+        setTimeout(() => setSaveError(null), 5000);
+      } finally {
+        setIsSaving(false);
+      }
     }
   };
 
@@ -1123,8 +1165,17 @@ export default function StudyTracker() {
                                     <button onClick={() => startEdit(category)} className="p-1 hover:bg-gray-100 rounded">
                                       <Edit2 className="w-4 h-4 text-gray-400" />
                                     </button>
-                                    <button onClick={() => deleteCategory(category.id)} className="p-1 hover:bg-gray-100 rounded">
-                                      <Trash2 className="w-4 h-4 text-gray-400" />
+                                    <button 
+                                      onClick={() => deleteCategory(category.id)} 
+                                      className="p-1 hover:bg-red-100 hover:text-red-600 rounded disabled:opacity-50 transition-colors"
+                                      disabled={isSaving}
+                                      title="Delete category"
+                                    >
+                                      {isSaving ? (
+                                        <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
+                                      ) : (
+                                        <Trash2 className="w-4 h-4 text-gray-400" />
+                                      )}
                                     </button>
                                   </>
                                 )}
