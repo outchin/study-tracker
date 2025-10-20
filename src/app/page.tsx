@@ -527,10 +527,8 @@ export default function StudyTracker() {
       console.log('Saving session to Notion...');
       await logSessionToNotion(categoryId, sessionDuration, isPomodoroMode);
       
-      // If successful, sync category data
-      await syncCategoryToNotion(categoryId);
-      
-      // Only after successful save, update local data and reset timer
+      // Update local data after successful session save
+      console.log('Session saved successfully, updating local data...');
       setCategories(prev => prev.map(cat => {
         if (cat.id === categoryId) {
           const totalStudied = cat.totalStudied + cat.currentSession;
@@ -557,6 +555,15 @@ export default function StudyTracker() {
 
       resetTimerStates();
       console.log('Session saved and timer stopped successfully');
+      
+      // Try to sync category data in background (don't block on this)
+      try {
+        await syncCategoryToNotion(categoryId);
+        console.log('Category synced successfully');
+      } catch (syncError) {
+        console.warn('Category sync failed, but session was saved:', syncError);
+        // Don't throw this error - session save was successful
+      }
       
     } catch (error) {
       console.error('Failed to save session:', error);
