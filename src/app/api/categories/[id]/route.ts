@@ -19,15 +19,10 @@ export async function PATCH(
     
     console.log('Category data received:', category);
 
-    const properties = {
+    // Only include properties that exist in the database
+    const properties: any = {
       'Name': {
         title: [{ text: { content: category.name } }]
-      },
-      'Hourly Rate USD': {
-        number: category.hourlyRateUSD || category.hourlyRate || 25
-      },
-      'Hourly Rate MMK': {
-        number: category.hourlyRateMMK || 0
       },
       'Total Target': {
         number: category.totalTarget
@@ -47,25 +42,26 @@ export async function PATCH(
       'Today Studied': {
         number: parseFloat(category.todayStudied?.toFixed(2) || '0')
       },
-      'Earned USD': {
-        number: category.earnedUSD || category.earned || 0
-      },
-      'Earned MMK': {
-        number: category.earnedMMK || 0
-      },
       'Can Withdraw': {
         checkbox: category.canWithdraw || false
       },
       'Pomodoro Count': {
         number: category.pomodoroCount || 0
-      },
-      'Emoji': {
-        rich_text: [{ text: { content: category.emoji || '📚' } }]
-      },
-      'Priority': {
-        select: { name: category.priority || 'medium' }
       }
     };
+
+    // Only add optional properties if they might exist
+    if (category.hourlyRateUSD || category.hourlyRate) {
+      properties['Hourly Rate'] = {
+        number: category.hourlyRateUSD || category.hourlyRate || 25
+      };
+    }
+
+    if (category.earnedUSD || category.earned) {
+      properties['Earned'] = {
+        number: category.earnedUSD || category.earned || 0
+      };
+    }
 
     console.log('Properties to update:', properties);
 
