@@ -4,7 +4,17 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="ed7574df-c33f-456b-b23c-50cae8a105d6" name="Changes" comment="" />
+    <list default="true" id="ed7574df-c33f-456b-b23c-50cae8a105d6" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/package-lock.json" beforeDir="false" afterPath="$PROJECT_DIR$/package-lock.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/package.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/postcss.config.mjs" beforeDir="false" afterPath="$PROJECT_DIR$/postcss.config.mjs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/globals.css" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/globals.css" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/components/timetable/ScheduleBlocksList.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/timetable/ScheduleBlocksList.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/components/timetable/TimetableView.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/timetable/TimetableView.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/lib/scheduleStorage.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/lib/scheduleStorage.ts" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -88,7 +98,7 @@
       <updated>1760847471232</updated>
       <workItem from="1760847472619" duration="9426000" />
       <workItem from="1760873430683" duration="12000" />
-      <workItem from="1760882158806" duration="23307000" />
+      <workItem from="1760882158806" duration="41180000" />
     </task>
     <servers />
   </component>

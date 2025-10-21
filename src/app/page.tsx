@@ -46,7 +46,7 @@ interface Achievement {
 }
 
 export default function StudyTracker() {
-  const [view, setView] = useState<string>('dashboard');
+  const [view, setView] = useState<'dashboard' | 'bank' | 'achievements' | 'notion' | 'timetable'>('dashboard');
   const [categories, setCategories] = useState<Category[]>([]);
   const [activeTimer, setActiveTimer] = useState<number | null>(null);
   const [timerSeconds, setTimerSeconds] = useState<number>(0);
@@ -91,13 +91,13 @@ export default function StudyTracker() {
     const today = new Date().toISOString().split('T')[0];
     const todaySessions = sessions.filter(session => session.date === today && session.categoryId === categoryId);
     const totalTime = todaySessions.reduce((sum, session) => sum + session.duration, 0);
-    
+
     // Debug logging
     if (todaySessions.length > 0) {
       console.log(`Category ${categoryId} today sessions:`, todaySessions);
       console.log(`Total time: ${totalTime} hours`);
     }
-    
+
     return totalTime;
   };
 
@@ -129,7 +129,7 @@ export default function StudyTracker() {
         loadLocalData();
         return;
       }
-      
+
       const response = await apiClient.get('/api/categories');
       if (response.ok) {
         const notionCategories = await response.json();
@@ -181,7 +181,7 @@ export default function StudyTracker() {
   useEffect(() => {
     const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
     setCurrentDay(today);
-    
+
     // Update daily targets based on current day
     setCategories(prev => prev.map(cat => ({
       ...cat,
@@ -284,15 +284,15 @@ export default function StudyTracker() {
       'Saturday': { 'Japanese': 2, 'DevOps': 5, 'English': 1, 'Thesis': 0 },
       'Sunday': { 'Japanese': 1.5, 'DevOps': 1.5, 'English': 1, 'Thesis': 3 }
     };
-    
+
     const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
     const schedule = daySchedule[today] || daySchedule['Monday'];
-    
+
     if (subject === 'Japanese') return schedule['Japanese'] || 0;
     if (subject.includes('DevOps')) return schedule['DevOps'] || 0;
     if (subject === 'English') return schedule['English'] || 0;
     if (subject.includes('Thesis')) return schedule['Thesis'] || 0;
-    
+
     return 1;
   };
 
@@ -361,7 +361,7 @@ export default function StudyTracker() {
     let interval: NodeJS.Timeout;
     let startTime: number;
     let lastUpdateTime: number;
-    
+
     if (activeTimer) {
       console.log(`Timer effect started for category ${activeTimer}`);
       // Use stored start time if available (for page visibility sync)
@@ -370,17 +370,17 @@ export default function StudyTracker() {
         setTimerStartTime(startTime);
       }
       lastUpdateTime = performance.now();
-      
+
       // Use a more frequent interval to ensure accuracy
       interval = setInterval(() => {
         if (isPaused) {
           return; // Don't update anything when paused
         }
-        
+
         const currentTime = performance.now();
         const elapsedMs = currentTime - startTime - totalPausedTime;
         const elapsedSeconds = Math.floor(elapsedMs / 1000);
-        
+
         // Update timer display
         setTimerSeconds(elapsedSeconds);
 
@@ -392,7 +392,7 @@ export default function StudyTracker() {
           setPomodoroSeconds(prev => {
             const newSeconds = Math.floor(elapsedMs / 1000) % (POMODORO_WORK + POMODORO_BREAK);
             const currentCycleSeconds = newSeconds <= POMODORO_WORK ? newSeconds : newSeconds - POMODORO_WORK;
-            
+
             if (!isBreakTime && newSeconds >= POMODORO_WORK && newSeconds < POMODORO_WORK + POMODORO_BREAK) {
               if (!isBreakTime) { // Prevent multiple notifications
                 setIsBreakTime(true);
@@ -420,12 +420,12 @@ export default function StudyTracker() {
               const timeToAdd = timeSinceLastUpdate / 3600; // Convert to hours
               const newCurrentSession = cat.currentSession + timeToAdd;
               const newTodayStudied = cat.todayStudied + timeToAdd;
-              
+
               // Log every 10 seconds for debugging
               if (Math.floor(newCurrentSession * 3600) % 10 === 0) {
                 console.log(`Accurate timer update: ${newCurrentSession.toFixed(4)}h, today: ${newTodayStudied.toFixed(4)}h, elapsed: ${elapsedSeconds}s`);
               }
-              
+
               return {
                 ...cat,
                 currentSession: newCurrentSession,
@@ -439,7 +439,7 @@ export default function StudyTracker() {
     } else {
       console.log('Timer effect: no active timer');
     }
-    
+
     return () => {
       if (interval) {
         console.log('Clearing accurate timer interval');
@@ -483,13 +483,13 @@ export default function StudyTracker() {
 
   const startTimer = (categoryId: number, pomodoro: boolean = false) => {
     console.log(`Starting timer for category ${categoryId}, pomodoro: ${pomodoro}`);
-    
+
     // Stop any existing timer first
     if (activeTimer !== null) {
       console.log(`Stopping existing timer for category ${activeTimer}`);
       setActiveTimer(null);
     }
-    
+
     requestNotificationPermission();
     setActiveTimer(categoryId);
     setIsPomodoroMode(pomodoro);
@@ -500,11 +500,11 @@ export default function StudyTracker() {
     setIsPaused(false);
     setPausedSeconds(0);
     setTotalPausedTime(0);
-    
+
     setCategories(prev => prev.map(cat =>
         cat.id === categoryId ? { ...cat, isActive: true } : { ...cat, isActive: false }
     ));
-    
+
     console.log(`Timer started for category ${categoryId}`);
   };
 
@@ -529,7 +529,7 @@ export default function StudyTracker() {
 
   const stopTimer = async (categoryId: number) => {
     console.log(`Stopping timer for category ${categoryId}`);
-    
+
     const currentCategory = categories.find(c => c.id === categoryId);
     if (!currentCategory) {
       console.error(`Category ${categoryId} not found`);
@@ -538,7 +538,7 @@ export default function StudyTracker() {
 
     const sessionDuration = currentCategory.currentSession;
     console.log(`Session duration: ${sessionDuration} hours`);
-    
+
     if (sessionDuration <= 0) {
       // No session to save, just reset timer
       resetTimerStates();
@@ -553,7 +553,7 @@ export default function StudyTracker() {
       // First, try to save to Notion
       console.log('Saving session to Notion...');
       await logSessionToNotion(categoryId, sessionDuration, isPomodoroMode);
-      
+
       // Update local data after successful session save
       console.log('Session saved successfully, updating local data...');
       setCategories(prev => prev.map(cat => {
@@ -582,7 +582,7 @@ export default function StudyTracker() {
 
       resetTimerStates();
       console.log('Session saved and timer stopped successfully');
-      
+
       // Try to sync category data in background (don't block on this)
       try {
         await syncCategoryToNotion(categoryId);
@@ -591,11 +591,11 @@ export default function StudyTracker() {
         console.warn('Category sync failed, but session was saved:', syncError);
         // Don't throw this error - session save was successful
       }
-      
+
     } catch (error) {
       console.error('Failed to save session:', error);
       setSaveError('Failed to save session to Notion. Your data is preserved.');
-      
+
       // Keep the timer running and data intact
       // Don't reset anything, user can try again
       return;
@@ -618,7 +618,7 @@ export default function StudyTracker() {
 
   const addCategory = async () => {
     if (!newCategory.name) return;
-    
+
     const category: Category = {
       id: Date.now(),
       ...newCategory,
@@ -635,44 +635,44 @@ export default function StudyTracker() {
 
     try {
       setIsSaving(true);
-      
+
       // Check if API client is configured
       if (!apiClient.isConfigured()) {
         throw new Error('Please configure your Notion API credentials first');
       }
-      
+
       // First sync to Notion directly
       console.log('Syncing new category to Notion:', category.name);
       const response = await apiClient.post('/api/categories', category);
-      
+
       if (!response.ok) {
         throw new Error(`Failed to sync category: ${response.status} ${response.statusText}`);
       }
 
       const data = await response.json();
-      
+
       // Add to local state with the Notion page ID
       const categoryWithNotionId = {
         ...category,
         notionPageId: data.notionPageId
       };
-      
+
       setCategories(prev => [...prev, categoryWithNotionId]);
-      
+
       console.log('New category successfully synced to Notion');
-      setShowAchievement({ 
-        title: 'Category Added!', 
-        desc: `${category.name} synced to Notion` 
+      setShowAchievement({
+        title: 'Category Added!',
+        desc: `${category.name} synced to Notion`
       });
       setTimeout(() => setShowAchievement(null), 3000);
-      
+
     } catch (error) {
       console.error('Failed to sync new category to Notion:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      
+
       // Add to local state even if Notion sync fails
       setCategories(prev => [...prev, category]);
-      
+
       setSaveError(`Category added locally but failed to sync to Notion: ${errorMessage}`);
       setTimeout(() => setSaveError(null), 10000); // Clear error after 10 seconds
     } finally {
@@ -680,12 +680,12 @@ export default function StudyTracker() {
     }
 
     setShowAddModal(false);
-    setNewCategory({ 
-      name: '', 
-      hourlyRateUSD: 25, 
-      hourlyRateMMK: 105000, 
-      totalTarget: 100, 
-      monthlyTarget: 10, 
+    setNewCategory({
+      name: '',
+      hourlyRateUSD: 25,
+      hourlyRateMMK: 105000,
+      totalTarget: 100,
+      monthlyTarget: 10,
       dailyTarget: 1,
       emoji: '📚',
       priority: 'medium' as const
@@ -702,14 +702,14 @@ export default function StudyTracker() {
     if (typeof window !== 'undefined' && window.confirm(`Delete "${category.name}"? This action cannot be undone.`)) {
       try {
         setIsSaving(true);
-        
+
         // If category has a Notion page ID, archive it in Notion first
         if (category.notionPageId && apiClient.isConfigured()) {
           console.log('Archiving category in Notion:', category.name);
-          
+
           try {
             const archiveResponse = await apiClient.patch(`/api/categories/${category.notionPageId}/archive`, {});
-            
+
             if (!archiveResponse.ok) {
               console.warn('Failed to archive in Notion, but will delete locally');
             } else {
@@ -719,17 +719,17 @@ export default function StudyTracker() {
             console.warn('Archive failed:', archiveError);
           }
         }
-        
+
         // Remove from local state
         setCategories(prev => prev.filter(c => c.id !== id));
-        
+
         console.log('Category deleted successfully:', category.name);
-        setShowAchievement({ 
-          title: 'Category Deleted!', 
-          desc: `${category.name} has been removed` 
+        setShowAchievement({
+          title: 'Category Deleted!',
+          desc: `${category.name} has been removed`
         });
         setTimeout(() => setShowAchievement(null), 3000);
-        
+
       } catch (error) {
         console.error('Failed to delete category:', error);
         setSaveError('Failed to delete category. Please try again.');
@@ -750,26 +750,26 @@ export default function StudyTracker() {
 
     try {
       setIsSaving(true);
-      
+
       // Update local state first
       setCategories(prev => prev.map(c => c.id === editingCategory.id ? editingCategory : c));
 
       // If category has Notion page ID and API is configured, sync to Notion
       if (editingCategory.notionPageId && apiClient.isConfigured()) {
         console.log('Syncing updated category to Notion:', editingCategory.name);
-        
+
         try {
           const response = await apiClient.patch(`/api/categories/${editingCategory.notionPageId}`, editingCategory);
-          
+
           if (!response.ok) {
             console.warn('Failed to sync to Notion, but local update succeeded');
             setSaveError('Category updated locally but failed to sync to Notion');
             setTimeout(() => setSaveError(null), 5000);
           } else {
             console.log('Category successfully synced to Notion');
-            setShowAchievement({ 
-              title: 'Goal Updated!', 
-              desc: `${editingCategory.name} synced to Notion` 
+            setShowAchievement({
+              title: 'Goal Updated!',
+              desc: `${editingCategory.name} has been updated`
             });
             setTimeout(() => setShowAchievement(null), 3000);
           }
@@ -780,16 +780,16 @@ export default function StudyTracker() {
         }
       } else {
         // No Notion sync needed, just show success
-        setShowAchievement({ 
-          title: 'Goal Updated!', 
-          desc: `${editingCategory.name} has been updated` 
+        setShowAchievement({
+          title: 'Goal Updated!',
+          desc: `${editingCategory.name} has been updated`
         });
         setTimeout(() => setShowAchievement(null), 3000);
       }
 
       setShowEditModal(false);
       setEditingCategory(null);
-      
+
     } catch (error) {
       console.error('Failed to update category:', error);
       setSaveError('Failed to update category. Please try again.');
@@ -809,9 +809,9 @@ export default function StudyTracker() {
       return c;
     }));
     if (typeof window !== 'undefined') {
-      const amount = showCurrency === 'USD' 
-        ? `$${category.earnedUSD.toFixed(2)} USD`
-        : `${(category.earnedMMK / 1000000).toFixed(2)}M MMK`;
+      const amount = showCurrency === 'USD'
+          ? `$${category.earnedUSD.toFixed(2)} USD`
+          : `${(category.earnedMMK / 1000000).toFixed(2)}M MMK`;
       alert(`Withdrawn ${amount}!`);
     }
   };
@@ -823,9 +823,9 @@ export default function StudyTracker() {
     }
 
     try {
-      const response = category.notionPageId 
-        ? await apiClient.patch(`/api/categories/${category.notionPageId}`, category)
-        : await apiClient.post('/api/categories', category);
+      const response = category.notionPageId
+          ? await apiClient.patch(`/api/categories/${category.notionPageId}`, category)
+          : await apiClient.post('/api/categories', category);
 
       if (!response.ok) {
         throw new Error(`Failed to sync category: ${response.status} ${response.statusText}`);
@@ -833,13 +833,13 @@ export default function StudyTracker() {
 
       const data = await response.json();
       if (data.notionPageId) {
-        setCategories(prev => prev.map(cat => 
-          cat.id === categoryId ? { ...cat, notionPageId: data.notionPageId } : cat
+        setCategories(prev => prev.map(cat =>
+            cat.id === categoryId ? { ...cat, notionPageId: data.notionPageId } : cat
         ));
       }
-      
+
       console.log('Category successfully synced to Notion');
-      
+
     } catch (error) {
       console.error('Failed to sync category to Notion:', error);
       throw error; // Re-throw so stopTimer can handle it
@@ -878,7 +878,7 @@ export default function StudyTracker() {
       // Only add to local sessions if Notion save was successful
       setSessions(prev => [...prev, session]);
       console.log('Session successfully saved to Notion');
-      
+
     } catch (error) {
       console.error('Failed to log session to Notion:', error);
       throw error; // Re-throw so stopTimer can handle it
@@ -944,7 +944,7 @@ export default function StudyTracker() {
           // Also update today's studied if the session is from today
           const isToday = sessionData.date === new Date().toISOString().split('T')[0];
           const newTodayStudied = isToday ? cat.todayStudied + durationHours : cat.todayStudied;
-          
+
           const earnedUSD = newTotalStudied * cat.hourlyRateUSD;
           const earnedMMK = newTotalStudied * cat.hourlyRateMMK;
 
@@ -980,9 +980,9 @@ export default function StudyTracker() {
       }, 100);
 
       console.log('Past session added successfully');
-      setShowAchievement({ 
-        title: 'Past Session Added!', 
-        desc: `${durationHours.toFixed(1)}h added to ${category.name}` 
+      setShowAchievement({
+        title: 'Past Session Added!',
+        desc: `${durationHours.toFixed(1)}h added to ${category.name}`
       });
       setTimeout(() => setShowAchievement(null), 3000);
 
@@ -1000,7 +1000,7 @@ export default function StudyTracker() {
         alert('Please configure your Notion API credentials first');
         return;
       }
-      
+
       const response = await apiClient.get('/api/categories');
       if (response.ok) {
         const notionCategories = await response.json();
@@ -1040,7 +1040,7 @@ export default function StudyTracker() {
   const totalEarnedMMK = categories.reduce((sum, cat) => sum + (cat.earnedMMK || 0), 0);
   const totalWithdrawableUSD = categories.filter(c => c.canWithdraw).reduce((sum, cat) => sum + (cat.earnedUSD || 0), 0);
   const totalWithdrawableMMK = categories.filter(c => c.canWithdraw).reduce((sum, cat) => sum + (cat.earnedMMK || 0), 0);
-  
+
   // Calculate today's earnings
   const todayEarnedUSD = categories.reduce((sum, cat) => sum + ((cat.todayStudied || 0) * (cat.hourlyRateUSD || 0)), 0);
   const todayEarnedMMK = categories.reduce((sum, cat) => sum + ((cat.todayStudied || 0) * (cat.hourlyRateMMK || 0)), 0);
@@ -1070,9 +1070,9 @@ export default function StudyTracker() {
   // Focus mode: show only active category when timer is running
   const focusMode = activeTimer !== null;
   const activeCategoryForFocus = focusMode ? categories.find(c => c.id === activeTimer) : null;
-  const categoriesToShow = focusMode && activeCategoryForFocus 
-    ? [activeCategoryForFocus] 
-    : categories.filter(cat => cat.dailyTarget > 0);
+  const categoriesToShow = focusMode && activeCategoryForFocus
+      ? [activeCategoryForFocus]
+      : categories.filter(cat => cat.dailyTarget > 0);
 
   return (
       <div className={`min-h-screen ${themeClasses.background}`}>
@@ -1093,9 +1093,9 @@ export default function StudyTracker() {
                 <p className="font-light">Save Failed</p>
                 <p className="text-xs opacity-75">{saveError}</p>
               </div>
-              <button 
-                onClick={() => setSaveError(null)}
-                className="p-1 hover:bg-red-700 rounded"
+              <button
+                  onClick={() => setSaveError(null)}
+                  className="p-1 hover:bg-red-700 rounded"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1149,9 +1149,9 @@ export default function StudyTracker() {
                       <button
                           onClick={() => setShowCurrency('USD')}
                           className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
-                            showCurrency === 'USD' 
-                              ? 'bg-white shadow-sm text-gray-900' 
-                              : 'text-gray-500 hover:text-gray-700'
+                              showCurrency === 'USD'
+                                  ? 'bg-white text-black shadow-sm'
+                                  : 'text-gray-600 hover:text-black'
                           }`}
                       >
                         USD
@@ -1159,9 +1159,9 @@ export default function StudyTracker() {
                       <button
                           onClick={() => setShowCurrency('MMK')}
                           className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
-                            showCurrency === 'MMK' 
-                              ? 'bg-white shadow-sm text-gray-900' 
-                              : 'text-gray-500 hover:text-gray-700'
+                              showCurrency === 'MMK'
+                                  ? 'bg-white text-black shadow-sm'
+                                  : 'text-gray-600 hover:text-black'
                           }`}
                       >
                         MMK
@@ -1169,9 +1169,9 @@ export default function StudyTracker() {
                     </div>
                   </div>
                   <button
-                    onClick={() => setShowConfigModal(true)}
-                    className="p-2 hover:bg-gray-100 rounded-md transition-colors"
-                    title="Settings"
+                      onClick={() => setShowConfigModal(true)}
+                      className="p-2 hover:bg-gray-100 rounded-md transition-colors"
+                      title="Settings"
                   >
                     <Settings className="w-4 h-4 text-gray-500" />
                   </button>
@@ -1185,281 +1185,235 @@ export default function StudyTracker() {
           {view === 'dashboard' && (
               <div className="space-y-8">
                 {!focusMode && (
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
-                    <div className="space-y-1">
-                      <p className={`text-xs uppercase tracking-wider ${themeClasses.textMuted}`}>Today's Earned</p>
-                      <p className={`text-2xl font-light flex items-center gap-2 text-green-600`}>
-                        {showCurrency === 'USD' ? (
-                          <span>${todayEarnedUSD.toFixed(0)} USD</span>
-                        ) : (
-                          <span>{(todayEarnedMMK / 1000000).toFixed(1)}M MMK</span>
-                        )}
-                      </p>
-                      <p className={`text-xs text-green-600`}>
-                        From today's study sessions
-                      </p>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+                      <div className="space-y-1">
+                        <p className={`text-xs uppercase tracking-wider ${themeClasses.textMuted}`}>Today's Earned</p>
+                        <p className={`text-2xl font-light flex items-center gap-2 text-green-600`}>
+                          {showCurrency === 'USD' ? (
+                              <span>${todayEarnedUSD.toFixed(0)} USD</span>
+                          ) : (
+                              <span>{(todayEarnedMMK / 1000000).toFixed(1)}M MMK</span>
+                          )}
+                        </p>
+                        <p className={`text-xs text-green-600`}>
+                          From today's study sessions
+                        </p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className={`text-xs uppercase tracking-wider ${themeClasses.textMuted}`}>Today's Progress</p>
+                        <p className={`text-2xl font-light ${themeClasses.text}`}>{formatHoursToMinutes(categories.reduce((sum, cat) => sum + cat.todayStudied, 0))}</p>
+                        <p className={`text-xs ${themeClasses.textMuted}`}>of {categories.reduce((sum, cat) => sum + cat.dailyTarget, 0).toFixed(1)}h target</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className={`text-xs uppercase tracking-wider ${themeClasses.textMuted}`}>Study Subjects</p>
+                        <p className={`text-2xl font-light ${themeClasses.text}`}>{categories.filter(c => c.dailyTarget > 0).length}</p>
+                        <p className={`text-xs ${themeClasses.textMuted}`}>active today</p>
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      <p className={`text-xs uppercase tracking-wider ${themeClasses.textMuted}`}>Today's Progress</p>
-                      <p className={`text-2xl font-light ${themeClasses.text}`}>{formatHoursToMinutes(categories.reduce((sum, cat) => sum + cat.todayStudied, 0))}</p>
-                      <p className={`text-xs ${themeClasses.textMuted}`}>of {categories.reduce((sum, cat) => sum + cat.dailyTarget, 0).toFixed(1)}h target</p>
-                    </div>
-                    <div className="space-y-1">
-                      <p className={`text-xs uppercase tracking-wider ${themeClasses.textMuted}`}>Study Subjects</p>
-                      <p className={`text-2xl font-light ${themeClasses.text}`}>{categories.filter(c => c.dailyTarget > 0).length}</p>
-                      <p className={`text-xs ${themeClasses.textMuted}`}>active today</p>
-                    </div>
-                  </div>
                 )}
 
-                {!focusMode && <div className={`h-px ${themeClasses.border}`}></div>}
-
-                {!focusMode && (
-                  <DailyFocusBreakdown 
-                    categories={categories} 
-                    showCurrency={showCurrency}
-                  />
-                )}
 
                 {!focusMode && <div className={`h-px ${themeClasses.border}`}></div>}
 
                 <div className="space-y-6">
                   {focusMode && (
-                    <div className={`text-center py-8 ${themeClasses.textMuted}`}>
-                      <h2 className={`text-3xl font-light mb-2 ${themeClasses.text}`}>Focus Mode</h2>
-                      <p className="text-lg">Stay focused on your active study session</p>
-                    </div>
+                      <div className={`text-center py-8 ${themeClasses.textMuted}`}>
+                        <h2 className={`text-3xl font-light mb-2 ${themeClasses.text}`}>Focus Mode</h2>
+                        <p className="text-lg">Stay focused on your active study session</p>
+                      </div>
                   )}
-                  
+
                   {/* Categories View Toggle */}
                   {!focusMode && (
-                    <div className="flex items-center justify-between">
-                      <h3 className={`text-lg font-medium ${themeClasses.text}`}>Study Categories</h3>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setViewMode('list')}
-                          className={`p-2 rounded-lg transition-colors ${
-                            viewMode === 'list' 
-                              ? 'bg-blue-500 text-white' 
-                              : `${themeClasses.button}`
-                          }`}
-                          title="List View"
-                        >
-                          <List className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => setViewMode('grid')}
-                          className={`p-2 rounded-lg transition-colors ${
-                            viewMode === 'grid' 
-                              ? 'bg-blue-500 text-white' 
-                              : `${themeClasses.button}`
-                          }`}
-                          title="Grid View"
-                        >
-                          <Grid3X3 className="w-4 h-4" />
-                        </button>
+                      <div className="flex items-center justify-between">
+                        <h3 className={`text-lg font-medium ${themeClasses.text}`}>Study Categories</h3>
+                        <div className="flex items-center gap-2">
+                          <button
+                              onClick={() => setViewMode('list')}
+                              className={`p-2 rounded-lg transition-colors ${
+                                  viewMode === 'list'
+                                      ? 'bg-gray-100 text-black'
+                                      : 'text-gray-400 hover:text-black hover:bg-gray-50'
+                              }`}
+                              title="List View"
+                          >
+                            <List className="w-4 h-4" />
+                          </button>
+                          <button
+                              onClick={() => setViewMode('grid')}
+                              className={`p-2 rounded-lg transition-colors ${
+                                  viewMode === 'grid'
+                                      ? 'bg-gray-100 text-black'
+                                      : 'text-gray-400 hover:text-black hover:bg-gray-50'
+                              }`}
+                              title="Grid View"
+                          >
+                            <Grid3X3 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
-                    </div>
                   )}
-                  
+
                   {/* Categories Container */}
                   <div className={viewMode === 'grid' && !focusMode ? 'grid grid-cols-2 gap-6' : 'space-y-6'}>
                     {categoriesToShow
-                    .sort((a, b) => b.priority === 'high' ? 1 : -1)
-                    .map(category => {
-                    const dailyProgress = (category.todayStudied / category.dailyTarget) * 100;
-                    const monthlyProgress = (category.monthStudied / category.monthlyTarget) * 100;
-                    const totalProgress = (category.totalStudied / category.totalTarget) * 100;
-                    
-                    return (
-                        <div key={category.id} className="space-y-4 border-l-4 border-l-gray-800 pl-6">
-                          <div className="flex items-center justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-3">
-                                <h3 className="text-xl font-light tracking-wide">{category.name}</h3>
-                                {!focusMode && (
-                                  <>
-                                    <button onClick={() => startEdit(category)} className="p-1 hover:bg-gray-100 rounded">
-                                      <Edit2 className="w-4 h-4 text-gray-400" />
-                                    </button>
-                                    <button 
-                                      onClick={() => deleteCategory(category.id)} 
-                                      className="p-1 hover:bg-red-100 hover:text-red-600 rounded disabled:opacity-50 transition-colors"
-                                      disabled={isSaving}
-                                      title="Delete category"
-                                    >
-                                      {isSaving ? (
-                                        <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
-                                      ) : (
-                                        <Trash2 className="w-4 h-4 text-gray-400" />
-                                      )}
-                                    </button>
-                                  </>
-                                )}
-                              </div>
-                              <p className="text-sm text-gray-400 mt-1">
-                                {formatHoursToMinutes(category.totalStudied)} / {category.totalTarget}h
-                              </p>
-                            </div>
+                        .sort((a, b) => b.priority === 'high' ? 1 : -1)
+                        .map(category => {
+                          const dailyProgress = (category.todayStudied / category.dailyTarget) * 100;
+                          const monthlyProgress = (category.monthStudied / category.monthlyTarget) * 100;
+                          const totalProgress = (category.totalStudied / category.totalTarget) * 100;
 
-                            <div className="flex items-center gap-3">
-                              {category.isActive && (
-                                  <div>
-                                    <div className={`font-mono text-2xl tracking-tight ${isPaused ? 'text-orange-600' : ''}`}>
-                                      {formatTime(timerSeconds)}
-                                      {isPaused && <span className="text-sm ml-2 text-orange-600">⏸️ PAUSED</span>}
+                          return (
+                              <div key={category.id} className="space-y-4 border-l-4 border-l-gray-800 pl-6">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-3">
+                                      <span className="text-2xl">{category.emoji}</span>
+                                      <div>
+                                        <h3 className="font-medium text-lg">{category.name}</h3>
+                                        <p className="text-sm text-gray-400">
+                                          {showCurrency === 'USD'
+                                              ? `$${category.hourlyRateUSD}/hr`
+                                              : `${(category.hourlyRateMMK / 1000).toFixed(0)}K/hr`
+                                          }
+                                        </p>
+                                      </div>
                                     </div>
-                                    {isPomodoroMode && (
-                                        <div className="text-xs text-gray-400 text-center mt-1">
-                                          {isBreakTime ? (
-                                              <span className="flex items-center gap-1 justify-center">
-                                    <Coffee className="w-3 h-3" /> {formatTime(pomodoroSeconds)}
-                                  </span>
-                                          ) : (
-                                              <span>POMODORO {formatTime(pomodoroSeconds)} / 25:00</span>
-                                          )}
+                                  </div>
+
+                                  <div className="flex items-center gap-3">
+                                    {category.isActive && (
+                                        <div className="flex items-center gap-2 text-green-600">
+                                          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                                          <span className="text-sm font-medium">Active</span>
                                         </div>
                                     )}
-                                  </div>
-                              )}
 
-                              <div className="flex gap-2">
-                                {!category.isActive ? (
-                                    <>
+                                    <div className="flex gap-2">
                                       <button
                                           onClick={() => startTimer(category.id, false)}
-                                          className="p-2 hover:bg-gray-100 rounded transition"
-                                          disabled={activeTimer !== null && activeTimer !== category.id}
+                                          className="p-2 hover:bg-gray-100 rounded-md transition-colors"
+                                          title="Start Timer"
                                       >
-                                        <Play className="w-5 h-5" />
+                                        <Play className="w-4 h-4" />
                                       </button>
                                       <button
                                           onClick={() => startTimer(category.id, true)}
-                                          className="p-2 hover:bg-gray-100 rounded transition text-xs font-medium"
-                                          disabled={activeTimer !== null && activeTimer !== category.id}
+                                          className="p-2 hover:bg-gray-100 rounded-md transition-colors"
+                                          title="Start Pomodoro"
                                       >
-                                        POMODORO
+                                        <Coffee className="w-4 h-4" />
                                       </button>
-                                    </>
-                                ) : (
-                                    <>
-                                      {!isPaused ? (
-                                        <button onClick={() => pauseTimer()} className="p-2 hover:bg-gray-100 rounded transition">
-                                          <Pause className="w-5 h-5" />
-                                        </button>
+                                      <button
+                                          onClick={() => startEdit(category)}
+                                          className="p-2 hover:bg-gray-100 rounded-md transition-colors"
+                                          title="Edit"
+                                      >
+                                        <Edit2 className="w-4 h-4" />
+                                      </button>
+                                      <button
+                                          onClick={() => deleteCategory(category.id)}
+                                          className="p-2 hover:bg-red-100 text-red-600 rounded-md transition-colors"
+                                          title="Delete"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                  <div>
+                                    <div className="flex justify-between text-xs text-gray-400 mb-2">
+                                      <span>Daily ({formatHoursToMinutes(category.todayStudied)} / {category.dailyTarget}h)</span>
+                                      <span>{dailyProgress.toFixed(0)}%</span>
+                                    </div>
+                                    <div className="h-1 bg-gray-100">
+                                      <div
+                                          className="h-1 bg-green-500 transition-all duration-300"
+                                          style={{ width: `${Math.min(dailyProgress, 100)}%` }}
+                                      ></div>
+                                    </div>
+                                  </div>
+
+                                  <div>
+                                    <div className="flex justify-between text-xs text-gray-400 mb-2">
+                                      <span>Monthly ({formatHoursToMinutes(category.monthStudied)} / {category.monthlyTarget}h)</span>
+                                      <span>{monthlyProgress.toFixed(0)}%</span>
+                                    </div>
+                                    <div className="h-1 bg-gray-100">
+                                      <div
+                                          className="h-1 bg-blue-500 transition-all duration-300"
+                                          style={{ width: `${Math.min(monthlyProgress, 100)}%` }}
+                                      ></div>
+                                    </div>
+                                  </div>
+
+                                  <div>
+                                    <div className="flex justify-between text-xs text-gray-400 mb-2">
+                                      <span>Total ({formatHoursToMinutes(category.totalStudied)} / {category.totalTarget}h)</span>
+                                      <span>{totalProgress.toFixed(0)}%</span>
+                                    </div>
+                                    <div className="h-1 bg-gray-100">
+                                      <div
+                                          className="h-1 bg-purple-500 transition-all duration-300"
+                                          style={{ width: `${Math.min(totalProgress, 100)}%` }}
+                                      ></div>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center justify-between pt-2">
+                                  <div className="text-sm">
+                                    <span className="text-gray-400">Earned: </span>
+                                    <span className="font-light">
+                              {showCurrency === 'USD'
+                                  ? `$${category.earnedUSD.toFixed(0)}`
+                                  : `${(category.earnedMMK / 1000000).toFixed(2)}M`
+                              }
+                            </span>
+                                  </div>
+                                  {!focusMode && (
+                                      category.canWithdraw ? (
+                                          <button
+                                              onClick={() => withdrawFunds(category.id)}
+                                              className="text-xs bg-green-100 text-green-700 hover:bg-green-200 px-2 py-1 rounded transition-colors"
+                                          >
+                                            Withdraw
+                                          </button>
                                       ) : (
-                                        <button onClick={() => resumeTimer()} className="p-2 hover:bg-green-100 rounded transition bg-green-50">
-                                          <Play className="w-5 h-5 text-green-600" />
-                                        </button>
-                                      )}
-                                      <button 
-                                        onClick={() => stopTimer(category.id)} 
-                                        className="p-2 hover:bg-gray-100 rounded transition disabled:opacity-50" 
-                                        disabled={isSaving}
-                                      >
-                                        {isSaving ? (
-                                          <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
-                                        ) : (
-                                          <Square className="w-5 h-5" />
-                                        )}
-                                      </button>
-                                    </>
-                                )}
-                              </div>
-                            </div>
-                          </div>
+                                          <span className="text-xs text-gray-400">Locked</span>
+                                      )
+                                  )}
+                                </div>
 
-                          <div className="space-y-3">
-                            <div>
-                              <div className="flex justify-between text-xs text-gray-400 mb-2">
-                                <span>Daily</span>
-                                <span>{formatHoursToMinutes(category.todayStudied)} / {category.dailyTarget}h</span>
+                                <div className="h-px bg-gray-200 mt-6"></div>
                               </div>
-                              <div className="h-1 bg-gray-100">
-                                <div 
-                                  className="h-1 bg-green-500 transition-all"
-                                  style={{ width: `${Math.min(dailyProgress, 100)}%` }}
-                                ></div>
-                              </div>
-                            </div>
+                          );
+                        })}
+                  </div>
 
-                            <div>
-                              <div className="flex justify-between text-xs text-gray-400 mb-2">
-                                <span>Monthly</span>
-                                <span>{formatHoursToMinutes(category.monthStudied)} / {category.monthlyTarget}h</span>
-                              </div>
-                              <div className="h-1 bg-gray-100">
-                                <div 
-                                  className="h-1 bg-green-500 transition-all"
-                                  style={{ width: `${Math.min(monthlyProgress, 100)}%` }}
-                                ></div>
-                              </div>
-                            </div>
-
-                            <div>
-                              <div className="flex justify-between text-xs text-gray-400 mb-2">
-                                <span>Total</span>
-                                <span>{totalProgress.toFixed(1)}%</span>
-                              </div>
-                              <div className="h-1 bg-gray-100">
-                                <div 
-                                  className="h-1 bg-green-500 transition-all"
-                                  style={{ width: `${Math.min(totalProgress, 100)}%` }}
-                                ></div>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center justify-between pt-2">
-                            <div className="text-sm">
-                              <span className="text-gray-400">Earned: </span>
-                              <span className="font-light">
-                                {showCurrency === 'USD' 
-                                  ? `$${category.earnedUSD.toFixed(0)} USD`
-                                  : `${(category.earnedMMK / 1000000).toFixed(1)}M MMK`
-                                }
-                              </span>
-                            </div>
-                            {!focusMode && (
-                              category.canWithdraw ? (
-                                  <button
-                                      onClick={() => withdrawFunds(category.id)}
-                                      className="text-xs px-2 py-1 border border-black hover:bg-black hover:text-white rounded transition"
-                                  >
-                                    WITHDRAW
-                                  </button>
-                              ) : (
-                                  <span className="text-xs px-2 py-1 border border-gray-300 text-gray-400 rounded">LOCKED</span>
-                              )
-                            )}
-                          </div>
-
-                          <div className="h-px bg-gray-200 mt-6"></div>
+                  {!focusMode && (
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <button
+                              onClick={() => setShowAddModal(true)}
+                              className={`py-6 border border-dashed ${themeClasses.border} hover:${themeClasses.border} rounded transition flex items-center justify-center gap-2 ${themeClasses.textMuted} hover:${themeClasses.text}`}
+                          >
+                            <Plus className="w-5 h-5" />
+                            <span className="text-sm uppercase tracking-wider">New Goal</span>
+                          </button>
+                          <button
+                              onClick={() => setShowPastSessionModal(true)}
+                              className={`py-6 border border-dashed ${themeClasses.border} hover:${themeClasses.border} rounded transition flex items-center justify-center gap-2 ${themeClasses.textMuted} hover:${themeClasses.text}`}
+                          >
+                            <Clock className="w-5 h-5" />
+                            <span className="text-sm uppercase tracking-wider">Past Session</span>
+                          </button>
                         </div>
-                    );
-                  })}
-                  </div>
-
-                {!focusMode && (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <button
-                          onClick={() => setShowAddModal(true)}
-                          className={`py-6 border border-dashed ${themeClasses.border} hover:${themeClasses.border} rounded transition flex items-center justify-center gap-2 ${themeClasses.textMuted} hover:${themeClasses.text}`}
-                      >
-                        <Plus className="w-5 h-5" />
-                        <span className="text-sm uppercase tracking-wider">New Goal</span>
-                      </button>
-                      <button
-                          onClick={() => setShowPastSessionModal(true)}
-                          className={`py-6 border border-dashed ${themeClasses.border} hover:${themeClasses.border} rounded transition flex items-center justify-center gap-2 ${themeClasses.textMuted} hover:${themeClasses.text}`}
-                      >
-                        <Clock className="w-5 h-5" />
-                        <span className="text-sm uppercase tracking-wider">Past Session</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
+                      </div>
+                  )}
+                </div>
               </div>
           )}
 
@@ -1473,15 +1427,15 @@ export default function StudyTracker() {
                     <p className="text-xs uppercase tracking-wider text-gray-400 mb-3">Total Balance</p>
                     <div>
                       {showCurrency === 'USD' ? (
-                        <div>
-                          <p className="text-3xl font-light text-gray-900">${totalEarnedUSD.toFixed(2)}</p>
-                          <p className="text-sm text-gray-500">United States Dollar</p>
-                        </div>
+                          <div>
+                            <p className="text-3xl font-light text-gray-900">${totalEarnedUSD.toFixed(2)}</p>
+                            <p className="text-sm text-gray-500">United States Dollar</p>
+                          </div>
                       ) : (
-                        <div>
-                          <p className="text-3xl font-light text-gray-900">{(totalEarnedMMK / 1000000).toFixed(2)}M</p>
-                          <p className="text-sm text-gray-500">Myanmar Kyat</p>
-                        </div>
+                          <div>
+                            <p className="text-3xl font-light text-gray-900">{(totalEarnedMMK / 1000000).toFixed(2)}M</p>
+                            <p className="text-sm text-gray-500">Myanmar Kyat</p>
+                          </div>
                       )}
                     </div>
                   </div>
@@ -1489,15 +1443,15 @@ export default function StudyTracker() {
                     <p className="text-xs uppercase tracking-wider text-green-600 mb-3">Withdrawable</p>
                     <div>
                       {showCurrency === 'USD' ? (
-                        <div>
-                          <p className="text-3xl font-light text-green-700">${totalWithdrawableUSD.toFixed(2)}</p>
-                          <p className="text-sm text-green-600">Ready to withdraw</p>
-                        </div>
+                          <div>
+                            <p className="text-3xl font-light text-green-700">${totalWithdrawableUSD.toFixed(2)}</p>
+                            <p className="text-sm text-green-600">Ready to withdraw</p>
+                          </div>
                       ) : (
-                        <div>
-                          <p className="text-3xl font-light text-green-700">{(totalWithdrawableMMK / 1000000).toFixed(2)}M</p>
-                          <p className="text-sm text-green-600">Ready to withdraw</p>
-                        </div>
+                          <div>
+                            <p className="text-3xl font-light text-green-700">{(totalWithdrawableMMK / 1000000).toFixed(2)}M</p>
+                            <p className="text-sm text-green-600">Ready to withdraw</p>
+                          </div>
                       )}
                     </div>
                   </div>
@@ -1513,23 +1467,23 @@ export default function StudyTracker() {
                             <span>{formatHoursToMinutes(cat.totalStudied)}</span>
                             <span>×</span>
                             {showCurrency === 'USD' ? (
-                              <span>${cat.hourlyRateUSD}/hr</span>
+                                <span>${cat.hourlyRateUSD}/hr</span>
                             ) : (
-                              <span>{(cat.hourlyRateMMK / 1000).toFixed(0)}K/hr</span>
+                                <span>{(cat.hourlyRateMMK / 1000).toFixed(0)}K/hr</span>
                             )}
                           </p>
                         </div>
                         <div className="text-right">
                           <div>
                             {showCurrency === 'USD' ? (
-                              <span className="font-semibold text-lg">${cat.earnedUSD.toFixed(0)}</span>
+                                <span className="font-semibold text-lg">${cat.earnedUSD.toFixed(0)}</span>
                             ) : (
-                              <span className="font-semibold text-lg">{(cat.earnedMMK / 1000000).toFixed(2)}M</span>
+                                <span className="font-semibold text-lg">{(cat.earnedMMK / 1000000).toFixed(2)}M</span>
                             )}
                           </div>
                           {cat.canWithdraw && (
-                              <button 
-                                  onClick={() => withdrawFunds(cat.id)} 
+                              <button
+                                  onClick={() => withdrawFunds(cat.id)}
                                   className="text-xs bg-green-100 text-green-700 hover:bg-green-200 px-2 py-1 rounded mt-2 transition-colors"
                               >
                                 Withdraw
@@ -1561,6 +1515,13 @@ export default function StudyTracker() {
                       ))}
                     </div>
                 )}
+
+                <div className="h-px bg-gray-200"></div>
+                
+                <DailyFocusBreakdown
+                    categories={categories}
+                    showCurrency={showCurrency}
+                />
               </div>
           )}
 
@@ -1568,7 +1529,7 @@ export default function StudyTracker() {
               <div className="space-y-6">
                 <h2 className="text-2xl font-light">Notion Integration</h2>
                 <div className="h-px bg-gray-200"></div>
-                
+
                 {isNotionConfigured ? (
                     <div className="space-y-6">
                       <div className="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded">
@@ -1588,24 +1549,27 @@ export default function StudyTracker() {
                           </button>
                         </div>
                       </div>
-                      
+
                       <div className="space-y-4">
                         <h3 className="font-light text-lg">Study Categories</h3>
                         <div className="grid gap-3">
                           {categories.map(cat => (
                               <div key={cat.id} className="flex items-center justify-between p-4 border border-gray-200 rounded">
                                 <div>
-                                  <p className="font-medium">{cat.name}</p>
-                                  <p className="text-sm text-gray-500">
-                                    {formatHoursToMinutes(cat.totalStudied)} studied • {cat.pomodoroCount} 🍅
-                                    {cat.notionPageId && ' • Synced'}
-                                  </p>
+                                  <span className="text-2xl mr-3">{cat.emoji}</span>
+                                  <span className="font-medium">{cat.name}</span>
+                                  <span className="text-sm text-gray-500 ml-2">
+                            {showCurrency === 'USD'
+                                ? `$${cat.hourlyRateUSD}/hr`
+                                : `${(cat.hourlyRateMMK / 1000).toFixed(0)}K/hr`
+                            }
+                          </span>
                                 </div>
                                 <button
                                     onClick={() => syncCategoryToNotion(cat.id)}
-                                    className="text-sm px-3 py-1 bg-black text-white rounded hover:bg-gray-800 transition"
+                                    className="text-sm px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
                                 >
-                                  {cat.notionPageId ? 'Update' : 'Sync'}
+                                  Sync
                                 </button>
                               </div>
                           ))}
@@ -1620,12 +1584,10 @@ export default function StudyTracker() {
                             return (
                                 <div key={session.id} className="flex items-center justify-between p-3 bg-gray-50 rounded">
                                   <div>
-                                    <p className="text-sm font-medium">{category?.name || 'Unknown'}</p>
-                                    <p className="text-xs text-gray-500">
-                                      {session.duration.toFixed(2)}h • {session.date}
-                                      {session.isPomodoro && ' • 🍅'}
-                                    </p>
+                                    <p className="font-medium text-sm">{category?.name} - {session.date}</p>
+                                    <p className="text-xs text-gray-500">{formatHoursToMinutes(session.duration)} {session.isPomodoro ? '(Pomodoro)' : ''}</p>
                                   </div>
+                                  <span className="text-xs text-gray-400">{session.notes}</span>
                                 </div>
                             );
                           })}
@@ -1639,8 +1601,8 @@ export default function StudyTracker() {
                     <div className="text-center py-12">
                       <p className="text-gray-600 mb-4">Notion integration not configured</p>
                       <button
-                        onClick={() => setShowConfigModal(true)}
-                        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+                          onClick={() => setShowConfigModal(true)}
+                          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
                       >
                         Configure Notion
                       </button>
@@ -1651,14 +1613,14 @@ export default function StudyTracker() {
 
           {view === 'timetable' && (
               <TimetableView
-                onStartTimer={startTimer}
-                onPauseTimer={pauseTimer}
-                onResumeTimer={resumeTimer}
-                onStopTimer={stopTimer}
-                activeTimer={activeTimer}
-                timerSeconds={timerSeconds}
-                isPaused={isPaused}
-                categories={categories}
+                  onStartTimer={startTimer}
+                  onPauseTimer={pauseTimer}
+                  onResumeTimer={resumeTimer}
+                  onStopTimer={stopTimer}
+                  activeTimer={activeTimer}
+                  timerSeconds={timerSeconds}
+                  isPaused={isPaused}
+                  categories={categories}
               />
           )}
         </div>
@@ -1694,18 +1656,18 @@ export default function StudyTracker() {
                         className="border border-gray-300 rounded px-3 py-2"
                     />
                   </div>
-                  <button 
-                    onClick={addCategory} 
-                    className="w-full bg-black text-white py-2 rounded disabled:opacity-50 flex items-center justify-center gap-2"
-                    disabled={isSaving}
+                  <button
+                      onClick={addCategory}
+                      className="w-full bg-black text-white py-2 rounded disabled:opacity-50 flex items-center justify-center gap-2"
+                      disabled={isSaving}
                   >
                     {isSaving ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Syncing to Notion...
-                      </>
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Syncing to Notion...
+                        </>
                     ) : (
-                      'Add'
+                        'Add'
                     )}
                   </button>
                 </div>
@@ -1760,18 +1722,18 @@ export default function StudyTracker() {
                         className="border border-gray-300 rounded px-3 py-2"
                     />
                   </div>
-                  <button 
-                    onClick={saveEdit} 
-                    className="w-full bg-black text-white py-2 rounded disabled:opacity-50 flex items-center justify-center gap-2"
-                    disabled={isSaving}
+                  <button
+                      onClick={saveEdit}
+                      className="w-full bg-black text-white py-2 rounded disabled:opacity-50 flex items-center justify-center gap-2"
+                      disabled={isSaving}
                   >
                     {isSaving ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Updating...
-                      </>
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Updating...
+                        </>
                     ) : (
-                      'Save'
+                        'Save'
                     )}
                   </button>
                 </div>
@@ -1780,21 +1742,21 @@ export default function StudyTracker() {
         )}
 
         <AddPastSessionModal
-          isOpen={showPastSessionModal}
-          onClose={() => setShowPastSessionModal(false)}
-          onAdd={addPastSession}
-          categories={categories}
+            isOpen={showPastSessionModal}
+            onClose={() => setShowPastSessionModal(false)}
+            onAdd={addPastSession}
+            categories={categories}
         />
-        
+
         <ConfigurationModal
-          isOpen={showConfigModal}
-          onClose={() => setShowConfigModal(false)}
-          onSave={() => {
-            setIsNotionConfigured(configManager.isConfigured());
-            if (configManager.isConfigured()) {
-              loadFromNotion();
-            }
-          }}
+            isOpen={showConfigModal}
+            onClose={() => setShowConfigModal(false)}
+            onSave={() => {
+              setIsNotionConfigured(configManager.isConfigured());
+              if (configManager.isConfigured()) {
+                loadFromNotion();
+              }
+            }}
         />
       </div>
   );

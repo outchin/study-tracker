@@ -93,6 +93,13 @@ export default function TimetableView({
   };
 
   const updateCurrentSchedule = (schedule: DailySchedule) => {
+    console.log('updateCurrentSchedule called:', {
+      selectedDay,
+      scheduleDate: schedule.date,
+      blocksCount: schedule.blocks.length,
+      dayTheme: schedule.dayTheme
+    });
+    
     switch (selectedDay) {
       case 'yesterday':
         setYesterdaySchedule(schedule);
@@ -104,6 +111,8 @@ export default function TimetableView({
         setTomorrowSchedule(schedule);
         break;
     }
+    
+    console.log('About to call saveSchedule with blocks:', schedule.blocks.length);
     saveSchedule(schedule.date, schedule.blocks, schedule.dayTheme);
   };
 
@@ -200,25 +209,28 @@ export default function TimetableView({
     updateCurrentSchedule(updatedSchedule);
   };
 
-  const handleReplaceAllBlocks = (newBlocks: ScheduleBlock[]) => {
+  const handleReplaceAllBlocks = (newBlocks: ScheduleBlock[], newTheme?: string) => {
     const currentSchedule = getCurrentSchedule();
     if (!currentSchedule) return;
     
-    const updatedSchedule = { ...currentSchedule, blocks: newBlocks, isCustomized: true };
+    const updatedSchedule = { 
+      ...currentSchedule, 
+      blocks: newBlocks, 
+      dayTheme: newTheme || currentSchedule.dayTheme,
+      isCustomized: true 
+    };
     updateCurrentSchedule(updatedSchedule);
   };
 
   const handleUpdateDayTheme = (dayTheme: string) => {
-    console.log('handleUpdateDayTheme called with:', dayTheme);
-    const currentSchedule = getCurrentSchedule();
-    console.log('Current schedule:', currentSchedule);
-    if (!currentSchedule) {
-      console.log('No current schedule found');
-      return;
-    }
+    // Get the latest schedule state after blocks have been updated
+    const currentSchedule = selectedDay === 'today' ? todaySchedule : 
+                           selectedDay === 'tomorrow' ? tomorrowSchedule : 
+                           selectedDay === 'yesterday' ? yesterdaySchedule : null;
+    
+    if (!currentSchedule) return;
     
     const updatedSchedule = { ...currentSchedule, dayTheme: dayTheme || undefined, isCustomized: true };
-    console.log('Updated schedule with theme:', updatedSchedule);
     updateCurrentSchedule(updatedSchedule);
   };
 

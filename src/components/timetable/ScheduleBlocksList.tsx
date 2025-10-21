@@ -3,11 +3,11 @@
 import React, { useState } from 'react';
 import { Plus, RefreshCw, Copy, Download, Upload, Lightbulb } from 'lucide-react';
 import { DailySchedule, ScheduleBlock } from '../../types/schedule';
-import { 
-  getCurrentTime, 
-  isTimeBetween, 
-  calculateProgress, 
-  calculateTimeProgress 
+import {
+  getCurrentTime,
+  isTimeBetween,
+  calculateProgress,
+  calculateTimeProgress
 } from '../../lib/scheduleHelpers';
 import { resetToDefault, copyFromDate } from '../../lib/scheduleStorage';
 import ScheduleBlockCard from './ScheduleBlockCard';
@@ -27,7 +27,7 @@ interface ScheduleBlocksListProps {
   onDelete: (blockId: string) => void;
   onAdd: (block: ScheduleBlock) => void;
   onBulkAdd?: (blocks: ScheduleBlock[]) => void;
-  onReplaceAll?: (blocks: ScheduleBlock[]) => void;
+  onReplaceAll?: (blocks: ScheduleBlock[], theme?: string) => void;
   onUpdateDayTheme?: (dayTheme: string) => void;
 }
 
@@ -61,9 +61,9 @@ export default function ScheduleBlocksList({
 
   const getCurrentTimeBlock = (): string | null => {
     if (selectedDay !== 'today') return null;
-    
+
     const currentTime = getCurrentTime();
-    const block = schedule.blocks.find(block => 
+    const block = schedule.blocks.find(block =>
       isTimeBetween(currentTime, block.startTime, block.endTime)
     );
     return block?.id || null;
@@ -71,11 +71,11 @@ export default function ScheduleBlocksList({
 
   const getActiveTimerBlock = (): string | null => {
     if (!activeTimer) return null;
-    
+
     const category = categories.find(cat => cat.id === activeTimer);
     if (!category) return null;
-    
-    const block = schedule.blocks.find(block => 
+
+    const block = schedule.blocks.find(block =>
       block.categoryName === category.name && block.status === 'in-progress'
     );
     return block?.id || null;
@@ -98,7 +98,7 @@ export default function ScheduleBlocksList({
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayDate = yesterday.toISOString().split('T')[0];
-    
+
     if (window.confirm('Copy schedule from yesterday? This will replace the current schedule.')) {
       const copiedSchedule = copyFromDate(yesterdayDate, schedule.date);
       // Trigger parent update
@@ -121,7 +121,7 @@ export default function ScheduleBlocksList({
             <div className="flex items-center gap-3">
               <div className="flex-1">
                 <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                  <div 
+                  <div
                     className="h-full bg-green-500 transition-all duration-300"
                     style={{ width: `${progress.percentage}%` }}
                   />
@@ -132,13 +132,13 @@ export default function ScheduleBlocksList({
               </span>
             </div>
           </div>
-          
+
           <div>
             <p className="text-xs uppercase tracking-wider text-gray-500 mb-1">Time Progress</p>
             <div className="flex items-center gap-3">
               <div className="flex-1">
                 <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                  <div 
+                  <div
                     className="h-full bg-blue-500 transition-all duration-300"
                     style={{ width: `${timeProgress.percentage}%` }}
                   />
@@ -149,7 +149,7 @@ export default function ScheduleBlocksList({
               </span>
             </div>
           </div>
-          
+
           <div>
             <p className="text-xs uppercase tracking-wider text-gray-500 mb-1">Day Theme</p>
             <div className="flex items-center gap-2">
@@ -223,7 +223,7 @@ export default function ScheduleBlocksList({
             <Plus className="w-4 h-4" />
             Add Block
           </button>
-          
+
           <button
             onClick={() => setShowBulkActions(!showBulkActions)}
             className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition text-sm"
@@ -232,7 +232,7 @@ export default function ScheduleBlocksList({
             Bulk Actions
           </button>
         </div>
-        
+
         <div className="flex items-center gap-2">
           <button
             className="flex items-center gap-2 px-3 py-2 bg-yellow-100 text-yellow-700 rounded-lg hover:bg-yellow-200 transition text-sm"
@@ -262,7 +262,7 @@ Considerations:
 - Break frequency (Pomodoro 25/5)
 
 Please suggest an optimized schedule in JSON format that I can paste directly into my app.`;
-              
+
               navigator.clipboard.writeText(prompt);
               alert('AI prompt copied to clipboard! Paste this to Claude and copy the result back.');
             }}
@@ -285,7 +285,7 @@ Please suggest an optimized schedule in JSON format that I can paste directly in
               <RefreshCw className="w-4 h-4" />
               Reset to Default
             </button>
-            
+
             <button
               onClick={handleCopyFromYesterday}
               className="flex items-center gap-2 px-3 py-2 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition text-sm"
@@ -293,7 +293,7 @@ Please suggest an optimized schedule in JSON format that I can paste directly in
               <Copy className="w-4 h-4" />
               Copy from Yesterday
             </button>
-            
+
             <button
               onClick={() => {
                 const jsonData = JSON.stringify(schedule, null, 2);
@@ -305,94 +305,233 @@ Please suggest an optimized schedule in JSON format that I can paste directly in
               <Download className="w-4 h-4" />
               Export JSON
             </button>
-            
+
             <button
               onClick={async () => {
                 try {
                   const text = await navigator.clipboard.readText();
+                  console.log('Clipboard text:', text);
                   const importedData = JSON.parse(text);
-                  
+                  console.log('Parsed data:', importedData);
+
                   // Check if it's a full schedule object or just blocks array
                   let blocksToImport: ScheduleBlock[] = [];
                   let dayThemeToImport: string | undefined = undefined;
-                  
+
                   if (importedData.blocks && Array.isArray(importedData.blocks)) {
                     blocksToImport = importedData.blocks;
                     dayThemeToImport = importedData.dayTheme;
                   } else if (Array.isArray(importedData)) {
                     blocksToImport = importedData;
                   } else {
-                    alert('Invalid schedule format in clipboard');
+                    alert('Invalid schedule format in clipboard. Expected array of blocks or object with blocks property.');
                     return;
                   }
-                  
+
+                  // Check if importing for a different date
+                  const currentDate = schedule.date;
+                  const importDate = importedData.date;
+                  const today = new Date().toISOString().split('T')[0];
+                  const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+                  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+                  console.log('Date check:', { importDate, currentDate, today, tomorrow, yesterday, selectedDay });
+
+                  if (importDate && importDate !== currentDate) {
+                    let targetDay = selectedDay;
+                    if (importDate === today) targetDay = 'today';
+                    else if (importDate === tomorrow) targetDay = 'tomorrow';
+                    else if (importDate === yesterday) targetDay = 'yesterday';
+
+                    if (targetDay !== selectedDay) {
+                      alert(`Import data is for ${importDate}. Please switch to the "${targetDay}" tab first, then try importing again.`);
+                      return;
+                    }
+                  }
+
                   if (blocksToImport.length === 0) {
                     alert('No blocks found to import');
                     return;
                   }
-                  
+
+                  // Category name mapping for common variations
+                  const categoryMapping: Record<string, string> = {
+                    'Cloud DevOps (Job-Ready)': 'Cloud DevOps',
+                    'English (IELTS 7.0+)': 'English',
+                    'Japanese (N5→N4→N3)': 'Japanese',
+                    'House Chores': 'Master Thesis', // Map to closest available or create new
+                    'Japanese': 'Japanese',
+                    'Cloud DevOps': 'Cloud DevOps',
+                    'English': 'English',
+                    'Master Thesis': 'Master Thesis'
+                  };
+
+                  // Validate and fix each block
+                  const validatedBlocks: ScheduleBlock[] = [];
+                  const errors: string[] = [];
+
+                  blocksToImport.forEach((block: any, index: number) => {
+                    const blockErrors: string[] = [];
+
+                    // Check required fields
+                    if (!block.startTime) blockErrors.push('startTime');
+                    if (!block.endTime) blockErrors.push('endTime');
+                    if (!block.categoryName) blockErrors.push('categoryName');
+
+                    // Validate time format (HH:MM)
+                    const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+                    if (block.startTime && !timeRegex.test(block.startTime)) {
+                      blockErrors.push('startTime format (expected HH:MM)');
+                    }
+                    if (block.endTime && !timeRegex.test(block.endTime)) {
+                      blockErrors.push('endTime format (expected HH:MM)');
+                    }
+
+                    if (blockErrors.length > 0) {
+                      errors.push(`Block ${index + 1}: Missing/invalid ${blockErrors.join(', ')}`);
+                      return;
+                    }
+
+                    // Calculate duration if not provided
+                    let duration = block.duration;
+                    if (!duration && block.startTime && block.endTime) {
+                      const [startH, startM] = block.startTime.split(':').map(Number);
+                      const [endH, endM] = block.endTime.split(':').map(Number);
+                      const startMinutes = startH * 60 + startM;
+                      const endMinutes = endH * 60 + endM;
+                      duration = (endMinutes - startMinutes) / 60;
+                    }
+
+                    // Map category name to system category
+                    const mappedCategoryName = categoryMapping[block.categoryName] || block.categoryName;
+
+                    // Create validated block with defaults
+                    const validatedBlock: ScheduleBlock = {
+                      id: block.id || `imported-${Date.now()}-${index}-${Math.random().toString(36).substr(2, 6)}`,
+                      startTime: block.startTime,
+                      endTime: block.endTime,
+                      categoryName: mappedCategoryName,
+                      duration: duration || 1,
+                      type: block.type || 'study',
+                      priority: block.priority || 'medium',
+                      description: block.description || `${mappedCategoryName} session`,
+                      pomodoros: block.pomodoros,
+                      status: 'upcoming'
+                    };
+
+                    validatedBlocks.push(validatedBlock);
+                  });
+
+                  if (errors.length > 0) {
+                    alert(`Import failed:\n${errors.join('\n')}\n\nRequired fields: startTime (HH:MM), endTime (HH:MM), categoryName`);
+                    return;
+                  }
+
                   // Clear existing blocks first if user confirms
                   const themeText = dayThemeToImport ? ` with theme "${dayThemeToImport}"` : '';
                   const shouldReplace = window.confirm(
-                    `Import ${blocksToImport.length} blocks${themeText}? This will replace the current schedule.`
+                    `Import ${validatedBlocks.length} blocks${themeText}? This will replace the current schedule.`
                   );
-                  
+
                   if (shouldReplace) {
-                    // Generate new IDs for all blocks to avoid conflicts
-                    const blocksWithNewIds = blocksToImport.map((block: ScheduleBlock, index: number) => ({
-                      ...block,
-                      id: `imported-${Date.now()}-${index}-${Math.random().toString(36).substr(2, 6)}`,
-                      status: 'upcoming' as const
-                    }));
-                    
+                    // Use the already validated blocks
+                    const blocksWithNewIds = validatedBlocks;
+                    console.log('Replacing with blocks:', blocksWithNewIds);
+
                     // Use bulk replace function if available, otherwise fall back to individual operations
                     if (onReplaceAll) {
-                      onReplaceAll(blocksWithNewIds);
-                      
-                      // Update day theme after blocks are replaced
-                      setTimeout(() => {
-                        if (dayThemeToImport && onUpdateDayTheme) {
-                          console.log('Importing day theme:', dayThemeToImport);
-                          onUpdateDayTheme(dayThemeToImport);
-                        } else {
-                          console.log('No day theme to import or onUpdateDayTheme not available', {
-                            dayThemeToImport,
-                            hasOnUpdateDayTheme: !!onUpdateDayTheme
+                      console.log('Using onReplaceAll function');
+
+                      try {
+                        // Pass both blocks and theme in a single call to prevent racing
+                        console.log('Calling onReplaceAll with blocks and theme:', {
+                          blocksCount: blocksWithNewIds.length,
+                          theme: dayThemeToImport
+                        });
+                        onReplaceAll(blocksWithNewIds, dayThemeToImport);
+                        console.log('onReplaceAll completed with theme:', dayThemeToImport);
+
+                        // Wait a bit for state to update, then check localStorage
+                        setTimeout(() => {
+                          console.log('Checking import results...');
+                          
+                          const currentDate = schedule.date;
+                          const savedData = localStorage.getItem(`schedule-${currentDate}`);
+                          console.log(`Final check - localStorage for date: ${currentDate}`);
+                          console.log('Final saved data in localStorage:', savedData);
+
+                          // Check all localStorage keys for debugging
+                          console.log('All schedule keys in localStorage:');
+                          Object.keys(localStorage).filter(key => key.startsWith('schedule-')).forEach(key => {
+                            console.log(`${key}:`, localStorage.getItem(key));
                           });
-                        }
-                        
-                        const successMessage = dayThemeToImport 
-                          ? `Schedule imported successfully with theme "${dayThemeToImport}"!`
-                          : 'Schedule imported successfully!';
-                        alert(successMessage);
-                      }, 200);
+
+                          if (savedData) {
+                            const parsedData = JSON.parse(savedData);
+                            console.log('Final parsed saved data:', parsedData);
+                            console.log('Final number of blocks saved:', parsedData.blocks ? parsedData.blocks.length : 'No blocks found');
+
+                            if (parsedData.blocks && parsedData.blocks.length === blocksWithNewIds.length) {
+                              console.log('Import completed successfully');
+                              alert('Schedule imported successfully! Blocks and theme saved.');
+
+                              // Re-enable auto refresh after fix
+                              setTimeout(() => {
+                                window.location.reload();
+                              }, 1000);
+                            } else {
+                              console.error('Import failed: Block count mismatch', {
+                                expected: blocksWithNewIds.length,
+                                actual: parsedData.blocks?.length || 0
+                              });
+                              alert('Import failed: Data not saved correctly. Check console for details.');
+                            }
+                          } else {
+                            console.error('Import failed: No data found in localStorage');
+                            alert('Import failed: No data saved to localStorage. Check console for details.');
+                          }
+                        }, 800);
+
+                      } catch (error) {
+                        console.error('Error in onReplaceAll:', error);
+                        alert('Import failed during block replacement. Check console for details.');
+                      }
                     } else {
                       // Fallback: Clear current blocks first then add new ones
                       schedule.blocks.forEach(block => onDelete(block.id));
-                      
+
                       setTimeout(() => {
                         blocksWithNewIds.forEach((block, index) => {
                           setTimeout(() => {
                             onAdd(block);
                           }, index * 50); // Reduced stagger time
                         });
-                        
+
                         setTimeout(() => {
                           if (dayThemeToImport && onUpdateDayTheme) {
                             console.log('Importing day theme (fallback):', dayThemeToImport);
                             onUpdateDayTheme(dayThemeToImport);
                           }
-                          
-                          const successMessage = dayThemeToImport 
+
+                          const successMessage = dayThemeToImport
                             ? `Schedule imported successfully with theme "${dayThemeToImport}"!`
                             : 'Schedule imported successfully!';
+
+                          console.log('Import completed successfully (fallback method)');
                           alert(successMessage);
+
+                          // Enable auto refresh after successful import
+                          setTimeout(() => {
+                            window.location.reload();
+                          }, 1000);
                         }, blocksWithNewIds.length * 50 + 300);
                       }, 200);
                     }
                   }
                 } catch (error) {
-                  alert('Failed to import: ' + (error as Error).message);
+                  console.error('Import error:', error);
+                  const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                  alert('Failed to import: ' + errorMessage + '\n\nCheck console for details.');
                 }
               }}
               className="flex items-center gap-2 px-3 py-2 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 transition text-sm"
@@ -454,7 +593,7 @@ Please suggest an optimized schedule in JSON format that I can paste directly in
             {['Japanese', 'Cloud DevOps', 'English', 'Master Thesis'].map((category) => {
               const hasCategory = schedule.blocks.some(block => block.categoryName === category);
               if (hasCategory) return null;
-              
+
               return (
                 <button
                   key={category}
@@ -463,14 +602,14 @@ Please suggest an optimized schedule in JSON format that I can paste directly in
                     const lastBlock = schedule.blocks
                       .sort((a, b) => a.endTime.localeCompare(b.endTime))
                       .pop();
-                    
+
                     const startTime = lastBlock ? lastBlock.endTime : '09:00';
-                    
+
                     // Calculate end time based on start time
                     const [startHour, startMin] = startTime.split(':').map(Number);
                     const endHour = startHour + 1;
                     const endTime = `${endHour.toString().padStart(2, '0')}:${startMin.toString().padStart(2, '0')}`;
-                    
+
                     onAdd({
                       id: `quick-${Date.now()}-${category.replace(/\s+/g, '').toLowerCase()}-${Math.random().toString(36).substr(2, 6)}`,
                       startTime,

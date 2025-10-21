@@ -288,7 +288,25 @@ export const saveSchedule = (date: string, blocks: ScheduleBlock[], dayTheme?: s
       blocks,
       dayTheme: dayTheme || undefined
     };
+    
+    console.log('saveSchedule called with:', {
+      date,
+      blocksCount: blocks.length,
+      dayTheme,
+      key,
+      scheduleData
+    });
+    
     localStorage.setItem(key, JSON.stringify(scheduleData));
+    
+    // Verify save
+    const saved = localStorage.getItem(key);
+    const parsed = saved ? JSON.parse(saved) : null;
+    console.log('saveSchedule verification:', {
+      saved: !!saved,
+      savedBlocksCount: parsed?.blocks?.length || 0
+    });
+    
   } catch (error) {
     console.error('Failed to save schedule:', error);
   }
