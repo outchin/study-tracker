@@ -62,6 +62,8 @@ export default function StudyTracker() {
   const [isNotionConfigured, setIsNotionConfigured] = useState<boolean>(false);
   const [currentDay, setCurrentDay] = useState<string>('');
   const [showCurrency, setShowCurrency] = useState<'USD' | 'MMK'>('USD');
+  const [currentProvider, setCurrentProvider] = useState<string>('notion');
+  const [isClient, setIsClient] = useState<boolean>(false);
   const [newCategory, setNewCategory] = useState({
     name: '',
     hourlyRateUSD: 25,
@@ -86,96 +88,82 @@ export default function StudyTracker() {
   const POMODORO_WORK = 25 * 60;
   const POMODORO_BREAK = 5 * 60;
 
-  // Calculate today's studied time for a category from sessions
-  const calculateTodayStudied = (categoryId: number): number => {
-    const today = new Date().toISOString().split('T')[0];
-    const todaySessions = sessions.filter(session => session.date === today && session.categoryId === categoryId);
-    const totalTime = todaySessions.reduce((sum, session) => sum + session.duration, 0);
 
-    // Debug logging
-    if (todaySessions.length > 0) {
-      console.log(`Category ${categoryId} today sessions:`, todaySessions);
-      console.log(`Total time: ${totalTime} hours`);
-    }
 
-    return totalTime;
-  };
-
-  const loadLocalData = () => {
-    // Fallback to localStorage or default
-    const savedCategories = localStorage.getItem('studyCategories');
-    if (savedCategories) {
-      const parsed = JSON.parse(savedCategories);
-      // Fix old format by ensuring new fields exist
-      const fixedCategories = parsed.map((cat: any) => ({
-        ...cat,
-        hourlyRateUSD: cat.hourlyRateUSD || cat.hourlyRate || 25,
-        hourlyRateMMK: cat.hourlyRateMMK || (cat.hourlyRate || 25) * 4200,
-        earnedUSD: cat.earnedUSD || (cat.totalStudied || 0) * (cat.hourlyRateUSD || cat.hourlyRate || 25),
-        earnedMMK: cat.earnedMMK || (cat.totalStudied || 0) * (cat.hourlyRateMMK || (cat.hourlyRate || 25) * 4200),
-        emoji: cat.emoji || '📚',
-        priority: cat.priority || 'medium'
-      }));
-      setCategories(fixedCategories);
-    } else {
-      setCategories(getDefaultCategories());
-    }
-  };
-
-  const loadDataFromNotion = async () => {
+  const loadDataFromDatabase = async () => {
     try {
-      if (!apiClient.isConfigured()) {
-        console.log('API client not configured, using local data');
-        loadLocalData();
+      if (!configManager.isConfigured()) {
+        console.log('Database not configured');
         return;
       }
 
       const response = await apiClient.get('/api/categories');
       if (response.ok) {
-        const notionCategories = await response.json();
-        if (notionCategories.length > 0) {
-          // Convert Notion data to local format
-          const convertedCategories = notionCategories.map((cat: any, index: number) => ({
-            id: index + 1, // Local ID for UI
-            name: cat.name,
-            hourlyRateUSD: cat.hourlyRateUSD || 25,
-            hourlyRateMMK: cat.hourlyRateMMK || 105000,
-            totalTarget: cat.totalTarget,
-            monthlyTarget: cat.monthlyTarget,
-            dailyTarget: cat.dailyTarget,
-            totalStudied: cat.totalStudied,
-            monthStudied: cat.monthStudied,
-            todayStudied: cat.todayStudied || 0, // Will be updated by useEffect
-            isActive: false,
-            currentSession: 0,
-            earnedUSD: cat.earnedUSD || 0,
-            earnedMMK: cat.earnedMMK || 0,
-            canWithdraw: cat.canWithdraw,
-            pomodoroCount: cat.pomodoroCount,
-            notionPageId: cat.notionPageId,
-            emoji: cat.emoji || '📚',
-            priority: cat.priority || 'medium' as const
-          }));
-          setCategories(convertedCategories);
-          return;
-        }
+        const categories = await response.json();
+        // Convert database data to local format
+        const convertedCategories = categories.map((cat: any, index: number) => ({
+          id: index + 1, // Local ID for UI
+          name: cat.name,
+          hourlyRateUSD: cat.hourlyRateUSD || 25,
+          hourlyRateMMK: cat.hourlyRateMMK || 105000,
+          totalTarget: cat.totalTarget,
+          monthlyTarget: cat.monthlyTarget,
+          dailyTarget: cat.dailyTarget,
+          totalStudied: cat.totalStudied,
+          monthStudied: cat.monthStudied,
+          todayStudied: cat.todayStudied || 0,
+          isActive: false,
+          currentSession: 0,
+          earnedUSD: cat.earnedUSD || 0,
+          earnedMMK: cat.earnedMMK || 0,
+          canWithdraw: cat.canWithdraw,
+          pomodoroCount: cat.pomodoroCount,
+          notionPageId: cat.categoryId,
+          emoji: cat.emoji || '📚',
+          priority: cat.priority || 'medium' as const
+        }));
+        setCategories(convertedCategories);
       }
     } catch (error) {
-      console.log('Failed to load from Notion, using local data');
-      loadLocalData();
+      console.error('Failed to load from database:', error);
     }
   };
 
-  // Load data from Notion and localStorage on mount
+  // Load data from database on mount
   useEffect(() => {
-
-    const savedAchievements = localStorage.getItem('studyAchievements');
-    if (savedAchievements) {
-      setAchievements(JSON.parse(savedAchievements));
-    }
-
-    loadDataFromNotion();
+    setIsClient(true);
+    
+    // Update current provider
+    setCurrentProvider(configManager.getDatabaseProvider());
+    
+    loadDataFromDatabase();
+    loadSessionsFromDatabase();
   }, []);
+
+  const loadSessionsFromDatabase = async () => {
+    try {
+      if (!configManager.isConfigured()) {
+        console.log('Database not configured');
+        return;
+      }
+
+      const response = await apiClient.get('/api/sessions');
+      if (response.ok) {
+        const dbSessions = await response.json();
+        const convertedSessions = dbSessions.map((session: any) => ({
+          id: session.sessionId || session.id,
+          categoryId: session.categoryId,
+          duration: session.duration,
+          date: session.date,
+          isPomodoro: session.isPomodoro,
+          notes: session.notes
+        }));
+        setSessions(convertedSessions);
+      }
+    } catch (error) {
+      console.error('Failed to load sessions from database:', error);
+    }
+  };
 
   // Set current day and update daily targets
   useEffect(() => {
@@ -189,90 +177,6 @@ export default function StudyTracker() {
     })));
   }, []);
 
-  const getDefaultCategories = (): Category[] => {
-    return [
-      {
-        id: 1,
-        name: 'Japanese',
-        emoji: '🇯🇵',
-        hourlyRateUSD: 60,
-        hourlyRateMMK: 252000,
-        totalTarget: 1200,
-        monthlyTarget: 112,
-        dailyTarget: 5.5, // Will be updated by getDailyTarget
-        totalStudied: 0,
-        monthStudied: 0,
-        todayStudied: 0,
-        isActive: false,
-        currentSession: 0,
-        earnedUSD: 0,
-        earnedMMK: 0,
-        canWithdraw: false,
-        pomodoroCount: 0,
-        priority: 'high'
-      },
-      {
-        id: 2,
-        name: 'Cloud DevOps',
-        emoji: '☁️',
-        hourlyRateUSD: 45,
-        hourlyRateMMK: 189000,
-        totalTarget: 700,
-        monthlyTarget: 84,
-        dailyTarget: 3, // Will be updated by getDailyTarget
-        totalStudied: 0,
-        monthStudied: 0,
-        todayStudied: 0,
-        isActive: false,
-        currentSession: 0,
-        earnedUSD: 0,
-        earnedMMK: 0,
-        canWithdraw: false,
-        pomodoroCount: 0,
-        priority: 'high'
-      },
-      {
-        id: 3,
-        name: 'English',
-        emoji: '🇬🇧',
-        hourlyRateUSD: 25,
-        hourlyRateMMK: 105000,
-        totalTarget: 400,
-        monthlyTarget: 70,
-        dailyTarget: 0, // Will be updated by getDailyTarget
-        totalStudied: 0,
-        monthStudied: 0,
-        todayStudied: 0,
-        isActive: false,
-        currentSession: 0,
-        earnedUSD: 0,
-        earnedMMK: 0,
-        canWithdraw: false,
-        pomodoroCount: 0,
-        priority: 'medium'
-      },
-      {
-        id: 4,
-        name: 'Master Thesis',
-        emoji: '📝',
-        hourlyRateUSD: 30,
-        hourlyRateMMK: 126000,
-        totalTarget: 450,
-        monthlyTarget: 48,
-        dailyTarget: 1, // Will be updated by getDailyTarget
-        totalStudied: 0,
-        monthStudied: 0,
-        todayStudied: 0,
-        isActive: false,
-        currentSession: 0,
-        earnedUSD: 0,
-        earnedMMK: 0,
-        canWithdraw: false,
-        pomodoroCount: 0,
-        priority: 'medium'
-      }
-    ];
-  };
 
   const getDailyTarget = (subject: string): number => {
     const daySchedule: Record<string, Record<string, number>> = {
@@ -296,49 +200,13 @@ export default function StudyTracker() {
     return 1;
   };
 
-  // Save to localStorage whenever categories change
-  useEffect(() => {
-    if (categories.length > 0) {
-      localStorage.setItem('studyCategories', JSON.stringify(categories));
-    }
-  }, [categories]);
-
-  // Save achievements
-  useEffect(() => {
-    if (achievements.length > 0) {
-      localStorage.setItem('studyAchievements', JSON.stringify(achievements));
-    }
-  }, [achievements]);
 
   // Check Notion configuration
   useEffect(() => {
     setIsNotionConfigured(configManager.isConfigured());
   }, []);
 
-  // Load sessions from localStorage
-  useEffect(() => {
-    const savedSessions = localStorage.getItem('studySessions');
-    if (savedSessions) {
-      setSessions(JSON.parse(savedSessions));
-    }
-  }, []);
 
-  // Save sessions to localStorage
-  useEffect(() => {
-    if (sessions.length > 0) {
-      localStorage.setItem('studySessions', JSON.stringify(sessions));
-    }
-  }, [sessions]);
-
-  // Update todayStudied for all categories when sessions change
-  useEffect(() => {
-    if (categories.length > 0 && sessions.length > 0) {
-      setCategories(prev => prev.map(cat => ({
-        ...cat,
-        todayStudied: calculateTodayStudied(cat.id)
-      })));
-    }
-  }, [sessions]);
 
   // Page Visibility API to handle background tabs
   useEffect(() => {
@@ -482,14 +350,15 @@ export default function StudyTracker() {
   };
 
   const startTimer = (categoryId: number, pomodoro: boolean = false) => {
-    console.log(`Starting timer for category ${categoryId}, pomodoro: ${pomodoro}`);
-
+    console.log(`🔴 START TIMER - Category: ${categoryId}, Pomodoro: ${pomodoro}`);
+    
     // Stop any existing timer first
     if (activeTimer !== null) {
-      console.log(`Stopping existing timer for category ${activeTimer}`);
+      console.log(`⏹️ Stopping existing timer for category ${activeTimer}`);
       setActiveTimer(null);
     }
 
+    console.log('📝 Setting timer states...');
     requestNotificationPermission();
     setActiveTimer(categoryId);
     setIsPomodoroMode(pomodoro);
@@ -541,6 +410,12 @@ export default function StudyTracker() {
 
     if (sessionDuration <= 0) {
       // No session to save, just reset timer
+      console.log('No session data to save (duration <= 0)');
+      setShowAchievement({
+        title: '⚠️ Timer Stopped',
+        desc: 'No study time recorded'
+      });
+      setTimeout(() => setShowAchievement(null), 3000);
       resetTimerStates();
       return;
     }
@@ -582,6 +457,15 @@ export default function StudyTracker() {
 
       resetTimerStates();
       console.log('Session saved and timer stopped successfully');
+      
+      // Show success notification instead of alert
+      const hours = sessionDuration.toFixed(2);
+      const categoryName = currentCategory.name;
+      setShowAchievement({
+        title: '✅ Session Saved!',
+        desc: `${categoryName}: ${hours}h synced to Notion`
+      });
+      setTimeout(() => setShowAchievement(null), 4000);
 
       // Try to sync category data in background (don't block on this)
       try {
@@ -595,6 +479,15 @@ export default function StudyTracker() {
     } catch (error) {
       console.error('Failed to save session:', error);
       setSaveError('Failed to save session to Notion. Your data is preserved.');
+      
+      // Show error notification to user
+      const hours = sessionDuration.toFixed(2);
+      const categoryName = currentCategory.name;
+      setShowAchievement({
+        title: '❌ Save Failed!',
+        desc: `${categoryName}: ${hours}h - Timer still running`
+      });
+      setTimeout(() => setShowAchievement(null), 5000);
 
       // Keep the timer running and data intact
       // Don't reset anything, user can try again
@@ -832,16 +725,16 @@ export default function StudyTracker() {
       }
 
       const data = await response.json();
-      if (data.notionPageId) {
+      if (data.categoryId) {
         setCategories(prev => prev.map(cat =>
-            cat.id === categoryId ? { ...cat, notionPageId: data.notionPageId } : cat
+            cat.id === categoryId ? { ...cat, categoryId: data.categoryId } : cat
         ));
       }
 
-      console.log('Category successfully synced to Notion');
+      console.log('Category successfully synced to DynamoDB');
 
     } catch (error) {
-      console.error('Failed to sync category to Notion:', error);
+      console.error('Failed to sync category to DynamoDB:', error);
       throw error; // Re-throw so stopTimer can handle it
     }
   };
@@ -864,7 +757,7 @@ export default function StudyTracker() {
     try {
       const response = await apiClient.post('/api/sessions', {
         sessionName: `${category.name} - ${new Date().toLocaleDateString()}`,
-        categoryPageId: category.notionPageId,
+        categoryId: category.notionPageId || categoryId.toString(),
         duration,
         date: session.date,
         isPomodoro,
@@ -875,12 +768,10 @@ export default function StudyTracker() {
         throw new Error(`Failed to save session: ${response.status} ${response.statusText}`);
       }
 
-      // Only add to local sessions if Notion save was successful
-      setSessions(prev => [...prev, session]);
-      console.log('Session successfully saved to Notion');
+      console.log('Session successfully saved to DynamoDB');
 
     } catch (error) {
-      console.error('Failed to log session to Notion:', error);
+      console.error('Failed to log session to DynamoDB:', error);
       throw error; // Re-throw so stopTimer can handle it
     }
   };
@@ -922,10 +813,10 @@ export default function StudyTracker() {
         notes: sessionData.description || `${sessionData.type} session`
       };
 
-      // Save to Notion first
+      // Save to DynamoDB first
       const response = await apiClient.post('/api/sessions', {
         sessionName: `${category.name} - ${sessionData.date} (${sessionData.type})`,
-        categoryPageId: category.notionPageId,
+        categoryId: category.notionPageId || sessionData.categoryId.toString(),
         duration: durationHours,
         date: sessionData.date,
         isPomodoro: false,
@@ -968,16 +859,10 @@ export default function StudyTracker() {
         return cat;
       }));
 
-      // Add to sessions
-      setSessions(prev => [...prev, session]);
 
-      // Sync category to Notion
+      // Sync category to DynamoDB
       await syncCategoryToNotion(sessionData.categoryId);
 
-      // Force localStorage save by triggering the useEffect
-      setTimeout(() => {
-        setCategories(prev => [...prev]);
-      }, 100);
 
       console.log('Past session added successfully');
       setShowAchievement({
@@ -988,23 +873,18 @@ export default function StudyTracker() {
 
     } catch (error) {
       console.error('Failed to add past session:', error);
-      setSaveError('Failed to save past session to Notion.');
+      setSaveError('Failed to save past session to DynamoDB.');
     } finally {
       setIsSaving(false);
     }
   };
 
-  const loadFromNotion = async () => {
+  const loadFromDatabase = async () => {
     try {
-      if (!apiClient.isConfigured()) {
-        alert('Please configure your Notion API credentials first');
-        return;
-      }
-
       const response = await apiClient.get('/api/categories');
       if (response.ok) {
-        const notionCategories = await response.json();
-        const convertedCategories = notionCategories.map((cat: any, index: number) => ({
+        const categories = await response.json();
+        const convertedCategories = categories.map((cat: any, index: number) => ({
           id: index + 1,
           name: cat.name,
           hourlyRateUSD: cat.hourlyRateUSD || 25,
@@ -1021,17 +901,20 @@ export default function StudyTracker() {
           earnedMMK: cat.earnedMMK || 0,
           canWithdraw: cat.canWithdraw,
           pomodoroCount: cat.pomodoroCount,
-          notionPageId: cat.notionPageId,
+          notionPageId: cat.categoryId,
           emoji: cat.emoji || '📚',
           priority: cat.priority || 'medium' as const
         }));
         setCategories(convertedCategories);
-        setShowAchievement({ title: 'Loaded from Notion!', desc: `${notionCategories.length} categories synced` });
+        
+        const providerName = currentProvider === 'dynamodb' ? 'DynamoDB' : 'Notion';
+        setShowAchievement({ title: `Loaded from ${providerName}!`, desc: `${categories.length} categories synced` });
         setTimeout(() => setShowAchievement(null), 3000);
       }
     } catch (error) {
       if (typeof window !== 'undefined') {
-        alert('Failed to load from Notion. Please check your connection.');
+        const providerName = currentProvider === 'dynamodb' ? 'DynamoDB' : 'Notion';
+        alert(`Failed to load from ${providerName}. Please check your connection.`);
       }
     }
   };
@@ -1134,7 +1017,7 @@ export default function StudyTracker() {
                     onClick={() => setView('notion')}
                     className={`pb-2 border-b-2 transition ${view === 'notion' ? `border-green-500 ${themeClasses.text}` : `border-transparent ${themeClasses.textMuted}`}`}
                 >
-                  Notion
+                  Database
                 </button>
                 <button
                     onClick={() => setView('timetable')}
@@ -1168,13 +1051,20 @@ export default function StudyTracker() {
                       </button>
                     </div>
                   </div>
-                  <button
-                      onClick={() => setShowConfigModal(true)}
-                      className="p-2 hover:bg-gray-100 rounded-md transition-colors"
-                      title="Settings"
-                  >
-                    <Settings className="w-4 h-4 text-gray-500" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {isClient && (
+                      <div className="text-xs text-gray-500 px-2 py-1 bg-gray-100 rounded-md">
+                        {currentProvider.toUpperCase()}
+                      </div>
+                    )}
+                    <button
+                        onClick={() => setShowConfigModal(true)}
+                        className="p-2 hover:bg-gray-100 rounded-md transition-colors"
+                        title="Settings"
+                    >
+                      <Settings className="w-4 h-4 text-gray-500" />
+                    </button>
+                  </div>
                 </div>
               </nav>
             </div>
@@ -1282,7 +1172,18 @@ export default function StudyTracker() {
                                   </div>
 
                                   <div className="flex items-center gap-3">
-                                    {category.isActive && (
+                                    {/* Timer Display */}
+                                    {activeTimer === category.id && (
+                                        <div className="flex items-center gap-2 text-blue-600 bg-blue-50 px-3 py-1 rounded-lg">
+                                          <Clock className="w-4 h-4" />
+                                          <span className="text-sm font-mono font-medium">
+                                            {formatTime(timerSeconds)}
+                                          </span>
+                                          {isPaused && <span className="text-xs">(Paused)</span>}
+                                        </div>
+                                    )}
+                                    
+                                    {category.isActive && activeTimer !== category.id && (
                                         <div className="flex items-center gap-2 text-green-600">
                                           <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
                                           <span className="text-sm font-medium">Active</span>
@@ -1290,20 +1191,69 @@ export default function StudyTracker() {
                                     )}
 
                                     <div className="flex gap-2">
-                                      <button
-                                          onClick={() => startTimer(category.id, false)}
-                                          className="p-2 hover:bg-gray-100 rounded-md transition-colors"
-                                          title="Start Timer"
-                                      >
-                                        <Play className="w-4 h-4" />
-                                      </button>
-                                      <button
-                                          onClick={() => startTimer(category.id, true)}
-                                          className="p-2 hover:bg-gray-100 rounded-md transition-colors"
-                                          title="Start Pomodoro"
-                                      >
-                                        <Coffee className="w-4 h-4" />
-                                      </button>
+                                      {activeTimer === category.id ? (
+                                        // Timer is running for this category
+                                        <>
+                                          {isPaused ? (
+                                            <button
+                                                onClick={resumeTimer}
+                                                className="p-2 hover:bg-green-100 text-green-600 rounded-md transition-colors"
+                                                title="Resume Timer"
+                                            >
+                                              <Play className="w-4 h-4" />
+                                            </button>
+                                          ) : (
+                                            <button
+                                                onClick={pauseTimer}
+                                                className="p-2 hover:bg-yellow-100 text-yellow-600 rounded-md transition-colors"
+                                                title="Pause Timer"
+                                            >
+                                              <Pause className="w-4 h-4" />
+                                            </button>
+                                          )}
+                                          <button
+                                              onClick={() => stopTimer(category.id)}
+                                              className="p-2 hover:bg-red-100 text-red-600 rounded-md transition-colors"
+                                              title="Stop Timer"
+                                          >
+                                            <Square className="w-4 h-4" />
+                                          </button>
+                                        </>
+                                      ) : (
+                                        // Timer is not running for this category
+                                        <>
+                                          <button
+                                              onClick={() => {
+                                                console.log(`▶️ Play button clicked for category ${category.id}`);
+                                                startTimer(category.id, false);
+                                              }}
+                                              className={`p-2 rounded-md transition-colors ${
+                                                activeTimer !== null 
+                                                  ? 'opacity-50 cursor-not-allowed' 
+                                                  : 'hover:bg-gray-100'
+                                              }`}
+                                              title="Start Timer"
+                                              disabled={activeTimer !== null}
+                                          >
+                                            <Play className="w-4 h-4" />
+                                          </button>
+                                          <button
+                                              onClick={() => {
+                                                console.log(`☕ Coffee button clicked for category ${category.id}`);
+                                                startTimer(category.id, true);
+                                              }}
+                                              className={`p-2 rounded-md transition-colors ${
+                                                activeTimer !== null 
+                                                  ? 'opacity-50 cursor-not-allowed' 
+                                                  : 'hover:bg-gray-100'
+                                              }`}
+                                              title="Start Pomodoro"
+                                              disabled={activeTimer !== null}
+                                          >
+                                            <Coffee className="w-4 h-4" />
+                                          </button>
+                                        </>
+                                      )}
                                       <button
                                           onClick={() => startEdit(category)}
                                           className="p-2 hover:bg-gray-100 rounded-md transition-colors"
@@ -1527,13 +1477,20 @@ export default function StudyTracker() {
 
           {view === 'notion' && (
               <div className="space-y-6">
-                <h2 className="text-2xl font-light">Notion Integration</h2>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-2xl font-light">Database Integration</h2>
+                  {isClient && (
+                    <div className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-md">
+                      Current: {currentProvider.toUpperCase()}
+                    </div>
+                  )}
+                </div>
                 <div className="h-px bg-gray-200"></div>
 
-                {isNotionConfigured ? (
+                {isClient && configManager.isConfigured() ? (
                     <div className="space-y-6">
                       <div className="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded">
-                        <span className="text-green-800">✓ Connected to Notion</span>
+                        <span className="text-green-800">✓ Connected to {currentProvider === 'dynamodb' ? 'DynamoDB' : 'Notion'}</span>
                         <div className="flex gap-2">
                           <button
                               onClick={() => setShowConfigModal(true)}
@@ -1542,10 +1499,10 @@ export default function StudyTracker() {
                             Settings
                           </button>
                           <button
-                              onClick={loadFromNotion}
+                              onClick={loadFromDatabase}
                               className="text-sm px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition"
                           >
-                            Load from Notion
+                            Load from {currentProvider === 'dynamodb' ? 'DynamoDB' : 'Notion'}
                           </button>
                         </div>
                       </div>
@@ -1599,12 +1556,12 @@ export default function StudyTracker() {
                     </div>
                 ) : (
                     <div className="text-center py-12">
-                      <p className="text-gray-600 mb-4">Notion integration not configured</p>
+                      <p className="text-gray-600 mb-4">Database integration not configured</p>
                       <button
                           onClick={() => setShowConfigModal(true)}
                           className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
                       >
-                        Configure Notion
+                        Configure Database
                       </button>
                     </div>
                 )}
@@ -1753,8 +1710,9 @@ export default function StudyTracker() {
             onClose={() => setShowConfigModal(false)}
             onSave={() => {
               setIsNotionConfigured(configManager.isConfigured());
+              setCurrentProvider(configManager.getDatabaseProvider());
               if (configManager.isConfigured()) {
-                loadFromNotion();
+                loadFromDatabase();
               }
             }}
         />
