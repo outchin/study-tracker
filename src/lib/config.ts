@@ -44,7 +44,7 @@ export class ConfigManager {
   }
 
   getDatabaseProvider(): DatabaseProvider {
-    return this.config?.databaseProvider || 'notion';
+    return this.config?.databaseProvider || 'dynamodb';
   }
 
   setConfig(config: AppConfig): void {
