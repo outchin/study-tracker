@@ -924,9 +924,19 @@ export default function StudyTracker() {
   const totalWithdrawableUSD = categories.filter(c => c.canWithdraw).reduce((sum, cat) => sum + (cat.earnedUSD || 0), 0);
   const totalWithdrawableMMK = categories.filter(c => c.canWithdraw).reduce((sum, cat) => sum + (cat.earnedMMK || 0), 0);
 
-  // Calculate today's earnings
-  const todayEarnedUSD = categories.reduce((sum, cat) => sum + ((cat.todayStudied || 0) * (cat.hourlyRateUSD || 0)), 0);
-  const todayEarnedMMK = categories.reduce((sum, cat) => sum + ((cat.todayStudied || 0) * (cat.hourlyRateMMK || 0)), 0);
+  // Calculate today's earnings from actual sessions
+  const today = new Date().toISOString().split('T')[0];
+  const getTodayStudiedForCategory = (category: Category) => {
+    return sessions
+      .filter(session => 
+        session.date === today && 
+        (session.categoryId === category.id || session.categoryId.toString() === category.notionPageId)
+      )
+      .reduce((total, session) => total + session.duration, 0) + (category.currentSession || 0);
+  };
+
+  const todayEarnedUSD = categories.reduce((sum, cat) => sum + (getTodayStudiedForCategory(cat) * (cat.hourlyRateUSD || 0)), 0);
+  const todayEarnedMMK = categories.reduce((sum, cat) => sum + (getTodayStudiedForCategory(cat) * (cat.hourlyRateMMK || 0)), 0);
 
   // Debug logging for earnings calculation
   console.log('Categories earnings debug:', categories.map(cat => ({
@@ -1091,7 +1101,7 @@ export default function StudyTracker() {
                       </div>
                       <div className="space-y-1">
                         <p className={`text-xs uppercase tracking-wider ${themeClasses.textMuted}`}>Today's Progress</p>
-                        <p className={`text-2xl font-light ${themeClasses.text}`}>{formatHoursToMinutes(categories.reduce((sum, cat) => sum + cat.todayStudied, 0))}</p>
+                        <p className={`text-2xl font-light ${themeClasses.text}`}>{formatHoursToMinutes(categories.reduce((sum, cat) => sum + getTodayStudiedForCategory(cat), 0))}</p>
                         <p className={`text-xs ${themeClasses.textMuted}`}>of {categories.reduce((sum, cat) => sum + cat.dailyTarget, 0).toFixed(1)}h target</p>
                       </div>
                       <div className="space-y-1">
@@ -1149,7 +1159,16 @@ export default function StudyTracker() {
                     {categoriesToShow
                         .sort((a, b) => b.priority === 'high' ? 1 : -1)
                         .map(category => {
-                          const dailyProgress = (category.todayStudied / category.dailyTarget) * 100;
+                          // Calculate today's actual studied hours from sessions
+                          const today = new Date().toISOString().split('T')[0];
+                          const todayActualStudied = sessions
+                            .filter(session => 
+                              session.date === today && 
+                              (session.categoryId === category.id || session.categoryId.toString() === category.notionPageId)
+                            )
+                            .reduce((total, session) => total + session.duration, 0) + (category.currentSession || 0);
+                          
+                          const dailyProgress = (todayActualStudied / category.dailyTarget) * 100;
                           const monthlyProgress = (category.monthStudied / category.monthlyTarget) * 100;
                           const totalProgress = (category.totalStudied / category.totalTarget) * 100;
 
@@ -1275,7 +1294,7 @@ export default function StudyTracker() {
                                 <div className="space-y-3">
                                   <div>
                                     <div className="flex justify-between text-xs text-gray-400 mb-2">
-                                      <span>Daily ({formatHoursToMinutes(category.todayStudied)} / {category.dailyTarget}h)</span>
+                                      <span>Daily ({formatHoursToMinutes(todayActualStudied)} / {category.dailyTarget}h)</span>
                                       <span>{dailyProgress.toFixed(0)}%</span>
                                     </div>
                                     <div className="h-1 bg-gray-100">

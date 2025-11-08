@@ -50,3 +50,26 @@ export async function PATCH(
     }, { status: 500 });
   }
 }
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const resolvedParams = await params;
+    const categoryId = resolvedParams.id;
+    
+    console.log('DELETE request received for category ID:', categoryId);
+    
+    await database.deleteCategory(categoryId);
+    console.log('Category deleted successfully:', categoryId);
+    
+    return NextResponse.json({ success: true, categoryId });
+  } catch (error) {
+    console.error('Error deleting category:', error);
+    return NextResponse.json({ 
+      error: 'Failed to delete category',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
+  }
+}
