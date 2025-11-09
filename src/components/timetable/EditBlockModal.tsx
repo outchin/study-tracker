@@ -54,17 +54,15 @@ export default function EditBlockModal({
 
   const validateForm = (): boolean => {
     const newErrors: string[] = [];
-    
-    // Time validation
-    if (formData.startTime >= formData.endTime) {
-      newErrors.push('End time must be after start time');
-    }
-    
+
     // Category validation
     if (!formData.categoryName) {
       newErrors.push('Please select a category');
     }
-    
+
+    // Note: We now support overnight schedules (e.g., 23:00 - 02:00)
+    // Duration validation is handled by calculateDuration() which adds 24h for overnight blocks
+
     // Check for time conflicts (exclude current block)
     const otherBlocks = existingBlocks.filter(b => b.id !== block.id);
     const tempBlock = {
@@ -73,12 +71,12 @@ export default function EditBlockModal({
       endTime: formData.endTime,
       duration: calculateDuration(formData.startTime, formData.endTime)
     };
-    
+
     const conflicts = detectTimeConflicts(otherBlocks, tempBlock);
     if (conflicts.length > 0) {
       newErrors.push(`Time conflict with: ${conflicts.map(b => b.categoryName).join(', ')}`);
     }
-    
+
     setErrors(newErrors);
     return newErrors.length === 0;
   };

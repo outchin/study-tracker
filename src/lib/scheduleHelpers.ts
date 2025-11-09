@@ -31,8 +31,17 @@ export const getCurrentTime = (): string => {
 export const isTimeBetween = (current: string, start: string, end: string): boolean => {
   const currentMinutes = timeToMinutes(current);
   const startMinutes = timeToMinutes(start);
-  const endMinutes = timeToMinutes(end);
-  
+  let endMinutes = timeToMinutes(end);
+
+  // Handle overnight ranges (e.g., 23:00 - 02:00)
+  if (endMinutes < startMinutes) {
+    endMinutes += 24 * 60; // Add 24 hours
+    // If current time is before midnight, we might need to adjust it too
+    if (currentMinutes < startMinutes) {
+      return currentMinutes <= endMinutes - (24 * 60);
+    }
+  }
+
   return currentMinutes >= startMinutes && currentMinutes <= endMinutes;
 };
 
@@ -49,7 +58,13 @@ export const minutesToTime = (minutes: number): string => {
 
 export const calculateDuration = (startTime: string, endTime: string): number => {
   const startMinutes = timeToMinutes(startTime);
-  const endMinutes = timeToMinutes(endTime);
+  let endMinutes = timeToMinutes(endTime);
+
+  // Handle overnight schedules (e.g., 23:00 - 02:00)
+  if (endMinutes < startMinutes) {
+    endMinutes += 24 * 60; // Add 24 hours
+  }
+
   return (endMinutes - startMinutes) / 60; // Return hours
 };
 
@@ -98,22 +113,24 @@ export const calculateProgress = (blocks: ScheduleBlock[]): ScheduleProgress => 
 };
 
 export const calculateTimeProgress = (blocks: ScheduleBlock[]): ScheduleProgress => {
-  const totalMinutes = blocks.reduce((sum, block) => 
-    sum + (timeToMinutes(block.endTime) - timeToMinutes(block.startTime)), 0
-  );
-  
+  const totalMinutes = blocks.reduce((sum, block) => {
+    const duration = calculateDuration(block.startTime, block.endTime);
+    return sum + (duration * 60); // Convert hours back to minutes
+  }, 0);
+
   const completedMinutes = blocks
     .filter(block => block.status === 'completed')
-    .reduce((sum, block) => 
-      sum + (timeToMinutes(block.endTime) - timeToMinutes(block.startTime)), 0
-    );
-  
+    .reduce((sum, block) => {
+      const duration = calculateDuration(block.startTime, block.endTime);
+      return sum + (duration * 60); // Convert hours back to minutes
+    }, 0);
+
   const percentage = totalMinutes > 0 ? (completedMinutes / totalMinutes) * 100 : 0;
-  
-  return { 
+
+  return {
     completed: completedMinutes / 60, // Convert to hours
     total: totalMinutes / 60, // Convert to hours
-    percentage 
+    percentage
   };
 };
 
@@ -198,15 +215,61 @@ export const deleteScheduleBlock = (blocks: ScheduleBlock[], blockId: string): S
 // Time conflict detection
 export const detectTimeConflicts = (blocks: ScheduleBlock[], newBlock: ScheduleBlock): ScheduleBlock[] => {
   const newStartMinutes = timeToMinutes(newBlock.startTime);
-  const newEndMinutes = timeToMinutes(newBlock.endTime);
-  
+  let newEndMinutes = timeToMinutes(newBlock.endTime);
+
+  // Handle overnight for new block
+  const newIsOvernight = newEndMinutes < newStartMinutes;
+  if (newIsOvernight) {
+    newEndMinutes += 24 * 60;
+  }
+
   return blocks.filter(block => {
     if (block.id === newBlock.id) return false; // Skip self when editing
-    
+
     const blockStartMinutes = timeToMinutes(block.startTime);
-    const blockEndMinutes = timeToMinutes(block.endTime);
-    
-    // Check for overlap
+    let blockEndMinutes = timeToMinutes(block.endTime);
+
+    // Handle overnight for existing block
+    const blockIsOvernight = blockEndMinutes < blockStartMinutes;
+    if (blockIsOvernight) {
+      blockEndMinutes += 24 * 60;
+    }
+
+    // For overnight blocks, we need to check both before and after midnight
+    if (newIsOvernight || blockIsOvernight) {
+      // Check if there's any overlap considering the day boundary
+      // This is more complex, but we can simplify by checking multiple scenarios
+
+      // Normalize times to handle wraparound
+      const hasOverlap = (start1: number, end1: number, start2: number, end2: number): boolean => {
+        return !(end1 <= start2 || start1 >= end2);
+      };
+
+      // Check primary overlap
+      if (hasOverlap(newStartMinutes, newEndMinutes, blockStartMinutes, blockEndMinutes)) {
+        return true;
+      }
+
+      // If new block is overnight, also check its after-midnight portion against before-midnight blocks
+      if (newIsOvernight && !blockIsOvernight) {
+        // Check if block overlaps with new block's after-midnight portion (0 to end)
+        if (hasOverlap(0, newEndMinutes - 24 * 60, blockStartMinutes, blockEndMinutes)) {
+          return true;
+        }
+      }
+
+      // If existing block is overnight, check if new block overlaps with its after-midnight portion
+      if (!newIsOvernight && blockIsOvernight) {
+        // Check if new block overlaps with existing block's after-midnight portion
+        if (hasOverlap(newStartMinutes, newEndMinutes, 0, blockEndMinutes - 24 * 60)) {
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    // Standard non-overnight overlap check
     return !(newEndMinutes <= blockStartMinutes || newStartMinutes >= blockEndMinutes);
   });
 };

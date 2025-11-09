@@ -398,7 +398,13 @@ Please suggest an optimized schedule in JSON format that I can paste directly in
                       const [startH, startM] = block.startTime.split(':').map(Number);
                       const [endH, endM] = block.endTime.split(':').map(Number);
                       const startMinutes = startH * 60 + startM;
-                      const endMinutes = endH * 60 + endM;
+                      let endMinutes = endH * 60 + endM;
+
+                      // Handle overnight schedules (e.g., 23:00 - 02:00)
+                      if (endMinutes < startMinutes) {
+                        endMinutes += 24 * 60; // Add 24 hours
+                      }
+
                       duration = (endMinutes - startMinutes) / 60;
                     }
 

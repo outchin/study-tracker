@@ -35,17 +35,15 @@ export default function AddBlockModal({
 
   const validateForm = (): boolean => {
     const newErrors: string[] = [];
-    
-    // Time validation
-    if (formData.startTime >= formData.endTime) {
-      newErrors.push('End time must be after start time');
-    }
-    
+
     // Category validation
     if (!formData.categoryName) {
       newErrors.push('Please select a category');
     }
-    
+
+    // Note: We now support overnight schedules (e.g., 23:00 - 02:00)
+    // Duration validation is handled by calculateDuration() which adds 24h for overnight blocks
+
     // Check for time conflicts
     const tempBlock = createScheduleBlock(
       formData.startTime,
@@ -55,12 +53,12 @@ export default function AddBlockModal({
       formData.priority,
       formData.description
     );
-    
+
     const conflicts = detectTimeConflicts(existingBlocks, tempBlock);
     if (conflicts.length > 0) {
       newErrors.push(`Time conflict with: ${conflicts.map(b => b.categoryName).join(', ')}`);
     }
-    
+
     setErrors(newErrors);
     return newErrors.length === 0;
   };
@@ -124,7 +122,13 @@ export default function AddBlockModal({
 
   const calculateDuration = (): number => {
     const start = new Date(`2024-01-01T${formData.startTime}:00`);
-    const end = new Date(`2024-01-01T${formData.endTime}:00`);
+    let end = new Date(`2024-01-01T${formData.endTime}:00`);
+
+    // Handle overnight schedules (e.g., 23:00 - 02:00)
+    if (end.getTime() < start.getTime()) {
+      end = new Date(`2024-01-02T${formData.endTime}:00`); // Next day
+    }
+
     return (end.getTime() - start.getTime()) / (1000 * 60 * 60);
   };
 
